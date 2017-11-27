@@ -4,7 +4,7 @@
 import thunkMiddleware from 'redux-thunk';
 import { createStore, applyMiddleware, combineReducers } from 'redux';
 
-export let defaultKey = '__index__';
+export let indexKey = '__index__';
 export let prefix = '$';
 
 let actions = null;
@@ -117,7 +117,7 @@ export const load = (ctlrs, path = '', converter = null, connecter = connect, wi
         }
         let reducer = (actionPaths) ? createReducer(actionPaths) : null;
         if (subReducers && reducer) {
-            subReducers[defaultKey] = reducer;
+            subReducers[indexKey] = reducer;
         }
         if (subReducers) {
             reducer = combineReducers(subReducers);
@@ -141,7 +141,7 @@ export const load = (ctlrs, path = '', converter = null, connecter = connect, wi
                     }
                 }
                 if (!pages) pages = {};
-                const pageKey = (path) ? path: defaultKey;
+                const pageKey = (path) ? path: indexKey;
                 pages[pageKey] = withRouter(connecter(
                     (state) => {
                         return (state = {}) => {
