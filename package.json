@@ -1,0 +1,31 @@
+{
+  "name": "@mtfe/state-engine",
+  "version": "0.0.1",
+  "description": "spa state engine based on redux",
+  "repository": {
+    "type": "git",
+    "url": "ssh://git@git.sankuai.com/~sunlin06/state-engine.git"
+  },
+  "engines": {
+    "node": ">= 8.0.0"
+  },
+  "main": "./src/index.js",
+  "scripts": {
+  },
+  "keywords": [
+    "redux",
+    "es6",
+    "async"
+  ],
+  "author": {
+      "name": "Lyall Sun",
+      "email": "sunlin06@meituan.com"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "redux": "^3.7.2",
+    "redux-thunk": "^2.2.0"
+  },
+  "devDependencies": {
+  }
+}
