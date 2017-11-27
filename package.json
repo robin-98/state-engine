@@ -9,7 +9,7 @@
   "engines": {
     "node": ">= 8.0.0"
   },
-  "main": "./src/index.js",
+  "main": "./lib/index.js",
   "scripts": {
     "build": "babel -d ./lib ./src",
     "prepublish": "npm run build && rm -f ./package-lock.json"

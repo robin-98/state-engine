@@ -4,8 +4,8 @@
 import thunkMiddleware from 'redux-thunk';
 import { createStore, applyMiddleware, combineReducers } from 'redux';
 
-let indexKey = '__index__';
-let prefix = '$';
+export let indexKey = '__index__';
+export let prefix = '$';
 
 let actions = null;
 let reducers = null;
