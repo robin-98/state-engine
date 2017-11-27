@@ -1,0 +1,8 @@
+node_modules
+.bash_env.config
+package-lock.json
+mkmt
+mkpub
+src
+debug
+tmp
