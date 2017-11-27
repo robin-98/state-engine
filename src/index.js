@@ -183,8 +183,10 @@ export const load = (ctlrs, path = '', converter = null, connecter = connect, wi
                                         try {
                                             const res = await actionHandler(...params);
                                             dispatch(actions[`${path}.${key}.$${actionStatuses.done}`](res));
+                                            return res;
                                         } catch (error) {
                                             dispatch(actions[`${path}.${key}.$${actionStatuses.error}`](error));
+                                            throw error;
                                         }
                                     }
                                 }
