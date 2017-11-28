@@ -8,7 +8,7 @@ import fetch from 'isomorphic-fetch';
 import Page1 from '../views/pages/page1';
 
 export default {
-    $page: Entry,
+    $page: Page1,
     // $combine: { 
     //     face: 'uiue.face.identifier', 
     //     foot: 'uiue.foot.toes', 
@@ -115,7 +115,7 @@ engine.dispatch('path.to.some.action', arg1, arg2, arg3);
     1. `connecter`: 对应于 `react-redux` 中的 `connect`
     1. `withRouter`: 对应于 `react-router` 中的 `withRouter`
 1. `store(...middlewares)`
-    1. `middlewares`: store 接受 `redux` 中间件作为参数进行配置，多个中间件以多参数形式排列，顺序加载
+    1. `middlewares`: store 接受 `Redux` 中间件作为参数进行配置，多个中间件以多参数形式排列，顺序加载
 1. `dispatch(actionPath, ...actionParameters)`
     1. `actionPath`: 从根节点到该接口的路径
     1. `actionParameters`: 该接口接收的参数
