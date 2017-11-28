@@ -1,6 +1,6 @@
 {
   "name": "@mtfe/state-engine",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "description": "spa state engine based on redux",
   "repository": {
     "type": "git",
