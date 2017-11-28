@@ -150,7 +150,7 @@ export const load = (ctlrs, path = '', converter = null, connecter = connect, wi
                                 if (!combinePaths.hasOwnProperty(key)) continue;
                                 const p = combinePaths[key];
                                 if (!p) {
-                                    if (key === '$this') targets = state;
+                                    if (key === `${prefix}this`) targets = state;
                                 } else {
                                     let x = state;
                                     let subkey = key;
@@ -158,10 +158,13 @@ export const load = (ctlrs, path = '', converter = null, connecter = connect, wi
                                         if (subp && x.hasOwnProperty(subp)) {
                                             x = x[subp];
                                             subkey = subp;
+                                            console.log('subp:', subp, 'x:', x);
                                         }
                                     })
                                     if (!targets) targets = {};
-                                    if (isPrivateKey(key)) {
+                                    if (key === `${prefix}this`) {
+                                        targets = x;
+                                    } else if (isPrivateKey(key)) {
                                         targets[subkey] = x;
                                     } else {
                                         targets[key] = x;
