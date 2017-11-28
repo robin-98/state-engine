@@ -7,24 +7,32 @@ import { createStore, applyMiddleware, combineReducers } from 'redux';
 export let indexKey = '__index__';
 export let prefix = '$';
 
-let actions = null;
-let reducers = null;
-let pages = null;
+const instance = {
+    actions: null,
+    reducers: null,
+    pages: null,
+    store: null,
+}
 
 // Create store
-
-let storeInstance = null;
 export const store = (...middlewares) => {
-    if (storeInstance) return storeInstance;
-    if (!reducers) return null;
-    storeInstance = createStore(
-        reducers,
+    if (instance.store) return instance.store;
+    if (!instance.reducers) return null;
+    instance.store = createStore(
+        instance.reducers,
         applyMiddleware(
             thunkMiddleware,
             ...middlewares,
         )
     )
-    return storeInstance;
+    return instance.store;
+}
+
+export const dispatch = async (actionName, ...params) => {
+    if (!instance.actions || !instance.store) throw 'Controllers not loaded yet';
+    if (typeof actionName !== 'string') throw 'action name should be a string';
+    if (typeof instance.actions[actionName] !== 'function') throw 'action does not exist';
+    return await store.dispatch(instance.actions[actionName](...params));
 }
 
 // reducer
@@ -48,19 +56,27 @@ export const actionStatuses = {
     error: 'error',
 };
 // load setting of controllers
-export const load = (ctlrs, path = '', converter = null, connecter = connect, withRouter = args => args) => {
+export const load = (ctlrs, params) => {
+    const { path, converter, connecter, withRouter } = Object.assign({
+        path: '',
+        converter: prop => () => prop,
+        connecter: () => {
+            return page => page;
+        },
+        withRouter: args => args,
+    }, params);
     let loadedData = {isAction: false, reducer: null };
     if (typeof ctlrs === 'function') {
         if (!path || path === '') {
-            actions = ctlrs;
+            instance.actions = ctlrs;
         } else {
             const levels = path.split('.');
             let key = null;
             while (!key && levels.length > 0) {
                 key = levels.pop();
             }
-            if (!actions) actions = {};
-            actions[path] = ctlrs;
+            if (!instance.actions) instance.actions = {};
+            instance.actions[path] = ctlrs;
             if (key) {
                 const statusKey = `${key}Status`;
                 const errorKey = `${key}Error`;
@@ -70,17 +86,17 @@ export const load = (ctlrs, path = '', converter = null, connecter = connect, wi
                     let data = {};
                     data[statusKey] = statusValue;
                     if (status === 'done') {
-                        actions[type] = (res) => {
+                        instance.actions[type] = (res) => {
                             data = Object.assign(data, res);
                             return { type, data };
                         }
                     } else if (status === 'error') {
-                        actions[type] = (err) => {
+                        instance.actions[type] = (err) => {
                             data[errorKey] = err;
                             return { type, data };
                         }
                     } else {
-                        actions[type] = () => ({ type, data });
+                        instance.actions[type] = () => ({ type, data });
                     }
                 })
             }
@@ -98,7 +114,7 @@ export const load = (ctlrs, path = '', converter = null, connecter = connect, wi
                     instructors[key] = ctlrs[key];
                 } else {
                     const p = (path) ? path + '.' + key : key;
-                    const result = load(ctlrs[key], p, converter, connecter, withRouter);
+                    const result = load(ctlrs[key], { path: p, converter, connecter, withRouter });
                     const { isAction, reducer } = result;
                     if (isAction) {
                         if (!reducerKeys) reducerKeys = [];
@@ -122,7 +138,7 @@ export const load = (ctlrs, path = '', converter = null, connecter = connect, wi
         if (subReducers) {
             reducer = combineReducers(subReducers);
         }
-        if (!path) reducers = reducer;
+        if (!path) instance.reducers = reducer;
         // Connect page
         if (instructors) {
             if (typeof connecter === 'function' && instructors[`${prefix}page`]) {
@@ -140,9 +156,9 @@ export const load = (ctlrs, path = '', converter = null, connecter = connect, wi
                         combinePaths[`${prefix}that`] = combine;
                     }
                 }
-                if (!pages) pages = {};
+                if (!instance.pages) instance.pages = {};
                 const pageKey = (path) ? path: indexKey;
-                pages[pageKey] = withRouter(connecter(
+                instance.pages[pageKey] = withRouter(connecter(
                     (state) => {
                         return (state = {}) => {
                             let targets = null; 
@@ -178,16 +194,16 @@ export const load = (ctlrs, path = '', converter = null, connecter = connect, wi
                         if (reducerKeys) {
                             for (let key of reducerKeys) {
                                 const actionKey= (path) ? path + '.' + key : key;
-                                const actionHandler = actions[actionKey];
+                                const actionHandler = instance.actions[actionKey];
                                 if (actionHandler) {
                                     dispatchers[key] = async (...params) => {
-                                        dispatch(actions[`${path}.${key}.$${actionStatuses.doing}`]());
+                                        dispatch(instance.actions[`${path}.${key}.$${actionStatuses.doing}`]());
                                         try {
                                             const res = await actionHandler(...params);
-                                            dispatch(actions[`${path}.${key}.$${actionStatuses.done}`](res));
+                                            dispatch(instance.actions[`${path}.${key}.$${actionStatuses.done}`](res));
                                             return res;
                                         } catch (error) {
-                                            dispatch(actions[`${path}.${key}.$${actionStatuses.error}`](error));
+                                            dispatch(instance.actions[`${path}.${key}.$${actionStatuses.error}`](error));
                                             throw error;
                                         }
                                     }
@@ -201,10 +217,10 @@ export const load = (ctlrs, path = '', converter = null, connecter = connect, wi
         }
         loadedData = { isAction: false, reducer}
     } else if (typeof converter === 'function') {
-        loadedData = load(converter(ctlrs), path, converter, connecter, withRouter);
+        loadedData = load(converter(ctlrs), { path, converter, connecter, withRouter });
     }
     if (!path) {
-        return pages;
+        return instance.pages;
     }
 
     return loadedData;
