@@ -158,7 +158,6 @@ export const load = (ctlrs, path = '', converter = null, connecter = connect, wi
                                         if (subp && x.hasOwnProperty(subp)) {
                                             x = x[subp];
                                             subkey = subp;
-                                            console.log('subp:', subp, 'x:', x);
                                         }
                                     })
                                     if (!targets) targets = {};
