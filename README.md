@@ -97,7 +97,7 @@ engine.dispatch('path.to.some.action', arg1, arg2, arg3);
 |-router.js
 |-app.js
 ```
-## Conceptions
+## Concepts
 1. State 的结构对等于 controller 的组织结构
 1. 页面通过 `$page` 挂载到相应的节点
 1. 当前节点的 State
