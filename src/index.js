@@ -32,16 +32,16 @@ export const dispatch = async (actionName, ...params) => {
     if (!instance.actions || !instance.store) throw 'Controllers not loaded yet';
     if (typeof actionName !== 'string') throw 'action name should be a string';
     if (typeof instance.actions[actionName] !== 'function') throw 'action does not exist';
-    return await store.dispatch(instance.actions[actionName](...params));
+    return await instance.store.dispatch(instance.actions[actionName](...params));
 }
 
 // reducer
-const createReducer = (actionKeys) => {
+const createReducer = (actionKeys, initState) => {
     let keys = actionKeys;
     if (!Array.isArray(actionKeys) && typeof actionKeys === 'string') {
         keys = [actionKeys];
     }
-    return (state = {}, action) => {
+    return (state = initState || {}, action) => {
         if (keys.indexOf(action.type) >= 0 ) {
             return Object.assign({}, state, action.data);
         }
@@ -65,7 +65,7 @@ export const load = (ctlrs, params) => {
         },
         withRouter: args => args,
     }, params);
-    let loadedData = {isAction: false, reducer: null };
+    let loadedData = {isAction: false, reducer: null, state: null };
     if (typeof ctlrs === 'function') {
         if (!path || path === '') {
             instance.actions = ctlrs;
@@ -107,6 +107,7 @@ export const load = (ctlrs, params) => {
         let subReducers = null;
         let instructors = null;
         let reducerKeys = null;
+        let subStates = null;
         for (let key in ctlrs) {
             if (ctlrs.hasOwnProperty(key)) {
                 if (isPrivateKey(key)) {
@@ -115,7 +116,7 @@ export const load = (ctlrs, params) => {
                 } else {
                     const p = (path) ? path + '.' + key : key;
                     const result = load(ctlrs[key], { path: p, converter, connecter, withRouter });
-                    const { isAction, reducer } = result;
+                    const { isAction, reducer, state } = result;
                     if (isAction) {
                         if (!reducerKeys) reducerKeys = [];
                         reducerKeys.push(key);
@@ -127,11 +128,14 @@ export const load = (ctlrs, params) => {
                     } else  if(reducer) {
                         if (!subReducers) subReducers = {};
                         subReducers[key] = reducer;
+                    } else if (state !== null) {
+                        if (!subStates) subStates = {};
+                        subStates[key] = state;
                     }
                 }
             }
         }
-        let reducer = (actionPaths) ? createReducer(actionPaths) : null;
+        let reducer = (actionPaths) ? createReducer(actionPaths, subStates) : null;
         if (subReducers && reducer) {
             subReducers[indexKey] = reducer;
         }
@@ -215,10 +219,18 @@ export const load = (ctlrs, params) => {
                 )(instructors[`${prefix}page`]));
             }
         }
-        loadedData = { isAction: false, reducer}
+        loadedData = { isAction: false, reducer, state: subStates}
     } else if (typeof converter === 'function') {
-        loadedData = load(converter(ctlrs), { path, converter, connecter, withRouter });
+        const convertedValue = converter(ctlrs);
+        if (typeof convertedValue === 'function') {
+            loadedData = load(convertedValue, { path, converter, connecter, withRouter });
+        } else {
+            loadedData.state = ctlrs;
+        }
+    } else {
+        loadedData.state = ctlrs;
     }
+
     if (!path) {
         return instance.pages;
     }

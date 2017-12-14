@@ -1,8 +1,6 @@
 node_modules
-.bash_env.config
-package-lock.json
+src
+.babelrc
 mkmt
 mkpub
-src
-debug
-tmp
+.bash_env.config
