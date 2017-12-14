@@ -214,7 +214,7 @@ export const load = (ctlrs, params) => {
                         if (reducerKeys) {
                             for (let key of reducerKeys) {
                                 const actionKey= (path) ? path + '.' + key : key;
-                                if (actionHandler) {
+                                if (typeof instance.actions[actionKey] === 'function') {
                                     dispatchers[key] = async (...params) => {
                                         return await dispatchAction(dispatch, actionKey , ...params);
                                     }
