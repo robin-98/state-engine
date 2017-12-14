@@ -4,3 +4,4 @@ src
 mkmt
 mkpub
 .bash_env.config
+.package-lock.json
