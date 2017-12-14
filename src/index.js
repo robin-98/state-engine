@@ -28,11 +28,27 @@ export const store = (...middlewares) => {
     return instance.store;
 }
 
+const dispatchAction = async (dispatch, actionName, ...params) => {
+    if (!actionName) throw 'Dispatching illegal action';
+    const actionHandler = instance.actions[actionName];
+    if (typeof actionHandler !== 'function') throw 'action does not exist';
+
+    dispatch(instance.actions[`${actionName}.$${actionStatuses.doing}`]());
+    try {
+        const res = await actionHandler(...params);
+        dispatch(instance.actions[`${actionName}.$${actionStatuses.done}`](res));
+        return res;
+    } catch (error) {
+        dispatch(instance.actions[`${actionName}.$${actionStatuses.error}`](error));
+        throw error;
+    }
+};
+
 export const dispatch = async (actionName, ...params) => {
     if (!instance.actions || !instance.store) throw 'Controllers not loaded yet';
     if (typeof actionName !== 'string') throw 'action name should be a string';
     if (typeof instance.actions[actionName] !== 'function') throw 'action does not exist';
-    return await instance.store.dispatch(instance.actions[actionName](...params));
+    return await dispatchAction(instance.store.dispatch, actionName, ...params);
 }
 
 // reducer
@@ -198,18 +214,9 @@ export const load = (ctlrs, params) => {
                         if (reducerKeys) {
                             for (let key of reducerKeys) {
                                 const actionKey= (path) ? path + '.' + key : key;
-                                const actionHandler = instance.actions[actionKey];
                                 if (actionHandler) {
                                     dispatchers[key] = async (...params) => {
-                                        dispatch(instance.actions[`${path}.${key}.$${actionStatuses.doing}`]());
-                                        try {
-                                            const res = await actionHandler(...params);
-                                            dispatch(instance.actions[`${path}.${key}.$${actionStatuses.done}`](res));
-                                            return res;
-                                        } catch (error) {
-                                            dispatch(instance.actions[`${path}.${key}.$${actionStatuses.error}`](error));
-                                            throw error;
-                                        }
+                                        return await dispatchAction(dispatch, actionKey , ...params);
                                     }
                                 }
                             }
