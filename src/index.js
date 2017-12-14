@@ -118,7 +118,7 @@ export const load = (ctlrs, params) => {
             }
         }
         loadedData = { isAction: true, reducer: null};
-    } else if (typeof ctlrs === 'object') {
+    } else if (!Array.isArray(ctlrs) && typeof ctlrs === 'object') {
         let actionPaths = null;
         let subReducers = null;
         let instructors = null;
