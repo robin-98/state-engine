@@ -54,7 +54,6 @@ const dispatchAction = async (dispatch, actionName, ...params) => {
     const actionHandler = instance.actions[actionName];
     if (typeof actionHandler !== 'function') throw 'action does not exist';
 
-    console.error('DISPATCHING ACTION:', actionName);
     dispatch(instance.actions[`${actionName}.$${actionStatuses.doing}`]());
     try {
         const res = await actionHandler(...params);
