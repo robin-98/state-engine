@@ -15,17 +15,38 @@ const instance = {
 }
 
 // Create store
-export const store = (...middlewares) => {
+const createStoreInstance = (useReduxTool, ...middlewares) => {
     if (instance.store) return instance.store;
     if (!instance.reducers) return null;
-    instance.store = createStore(
-        instance.reducers,
-        applyMiddleware(
-            thunkMiddleware,
-            ...middlewares,
+    if (useReduxTool) {
+        /* eslint-disable no-underscore-dangle */
+        instance.store = createStore(
+            instance.reducers,
+            window.__REDUX_DEVTOOLS_EXTENSION__ && window.__REDUX_DEVTOOLS_EXTENSION__(),
+            applyMiddleware(
+                thunkMiddleware,
+                ...middlewares,
+            )
         )
-    )
+        /* eslint-enable */
+    } else {
+        instance.store = createStore(
+            instance.reducers,
+            applyMiddleware(
+                thunkMiddleware,
+                ...middlewares,
+            )
+        )
+    }
     return instance.store;
+};
+
+export const store = (...middlewares) => {
+    return createStoreInstance(false, ...middlewares);
+}
+
+export const storeWithTools = (...middlewares) => {
+    return createStoreInstance(true, ...middlewares);
 }
 
 const dispatchAction = async (dispatch, actionName, ...params) => {
@@ -33,6 +54,7 @@ const dispatchAction = async (dispatch, actionName, ...params) => {
     const actionHandler = instance.actions[actionName];
     if (typeof actionHandler !== 'function') throw 'action does not exist';
 
+    console.error('DISPATCHING ACTION:', actionName);
     dispatch(instance.actions[`${actionName}.$${actionStatuses.doing}`]());
     try {
         const res = await actionHandler(...params);
@@ -117,8 +139,11 @@ export const load = (ctlrs, params) => {
                 })
             }
         }
-        loadedData = { isAction: true, reducer: null};
-    } else if (!Array.isArray(ctlrs) && typeof ctlrs === 'object') {
+        loadedData = { isAction: true, reducer: null, state: null };
+    } else if (!Array.isArray(ctlrs) 
+                && typeof ctlrs === 'object'
+                && ! (ctlrs instanceof Date)
+            ) {
         let actionPaths = null;
         let subReducers = null;
         let instructors = null;
@@ -144,7 +169,9 @@ export const load = (ctlrs, params) => {
                     } else  if(reducer) {
                         if (!subReducers) subReducers = {};
                         subReducers[key] = reducer;
-                    } else if (state !== null) {
+                    } 
+                    // State is combined with reducers, so they could exist at the same time
+                    if (state !== null) {
                         if (!subStates) subStates = {};
                         subStates[key] = state;
                     }
