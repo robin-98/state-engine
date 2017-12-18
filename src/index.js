@@ -71,12 +71,17 @@ const dispatchAction = (dispatch, actionName, ...params) => {
     } else if (handlerType === '[object Promise]') {
         promiseObj = actionHandler;
     } else if (handlerType === '[object Function]') {
-        const res = actionHandler(...params);
-        if (Object.prototype.toString.call(res) === '[object Promise]') {
-            promiseObj = res;
-        } else {
-            dispatch(instance.actions[`${actionName}.$${actionStatuses.done}`](res));
-            return Promise.resolve(res);
+        try {
+            const res = actionHandler(...params);
+            if (Object.prototype.toString.call(res) === '[object Promise]') {
+                promiseObj = res;
+            } else {
+                dispatch(instance.actions[`${actionName}.$${actionStatuses.done}`](res));
+                return Promise.resolve(res);
+            }
+        } catch (err) {
+            dispatch(instance.actions[`${actionName}.$${actionStatuses.error}`](err));
+            return Promise.reject(err);
         }
     }
     if (promiseObj) {
