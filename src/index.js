@@ -75,15 +75,18 @@ const dispatchAction = (dispatch, actionName, ...params) => {
         if (Object.prototype.toString.call(res) === '[object Promise]') {
             promiseObj = res;
         } else {
-            return dispatch(instance.actions[`${actionName}.$${actionStatuses.done}`](res));
+            dispatch(instance.actions[`${actionName}.$${actionStatuses.done}`](res));
+            return Promise.resolve(res);
         }
     }
 
     if (promiseObj) {
-        promiseObj.then((res) => {
+        return promiseObj.then((res) => {
             dispatch(instance.actions[`${actionName}.$${actionStatuses.done}`](res));
+            return res;
         }).catch((err) => {
             dispatch(instance.actions[`${actionName}.$${actionStatuses.error}`](error));
+            throw err;
         });
     } else dispatch({ type: 'error', data: `unsupported action handler type: ${handlerType}` });
 }
