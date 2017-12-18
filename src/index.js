@@ -79,16 +79,13 @@ const dispatchAction = (dispatch, actionName, ...params) => {
             return Promise.resolve(res);
         }
     }
-
     if (promiseObj) {
         return promiseObj.then((res, err) => {
-            if (!err) {
-                dispatch(instance.actions[`${actionName}.$${actionStatuses.done}`](res));
-                return res;
-            } else {
-                dispatch(instance.actions[`${actionName}.$${actionStatuses.error}`](error));
-                throw err;
-            }
+            dispatch(instance.actions[`${actionName}.$${actionStatuses.done}`](res));
+            return res;
+        }).catch((err) => {
+            dispatch(instance.actions[`${actionName}.$${actionStatuses.error}`](err));
+            throw err;
         });
     } else dispatch({ type: 'error', data: `unsupported action handler type: ${handlerType}` });
 }
