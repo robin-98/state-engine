@@ -3,6 +3,7 @@
  */
 import thunkMiddleware from 'redux-thunk';
 import { createStore, applyMiddleware, combineReducers } from 'redux';
+import co from 'co';
 
 export let indexKey = '__index__';
 export let prefix = '$';
@@ -49,28 +50,47 @@ export const storeWithTools = (...middlewares) => {
     return createStoreInstance(true, ...middlewares);
 }
 
-const dispatchAction = async (dispatch, actionName, ...params) => {
-    if (!actionName) throw 'Dispatching illegal action';
+const dispatchAction = (dispatch, actionName, ...params) => {
+    if (!instance.actions || !instance.store) 
+        return dispatch({ type: 'error', data: 'Controllers not loaded yet'});
+
+    if (typeof actionName !== 'string') 
+        return dispatch({type: 'error', data: 'action name should be a string'});
+    
+    if (typeof instance.actions[actionName] !== 'function') 
+        return dispatch({type: 'error', data: 'action does not exist'});
+
     const actionHandler = instance.actions[actionName];
-    if (typeof actionHandler !== 'function') throw 'action does not exist';
-
+    const handlerType = Object.prototype.toString.call(actionHandler);
+    let promiseObj = null;
     dispatch(instance.actions[`${actionName}.$${actionStatuses.doing}`]());
-    try {
-        const res = await actionHandler(...params);
-        dispatch(instance.actions[`${actionName}.$${actionStatuses.done}`](res));
-        return res;
-    } catch (error) {
-        dispatch(instance.actions[`${actionName}.$${actionStatuses.error}`](error));
-        throw error;
+    if (handlerType === '[object AsyncFunction]') {
+        promiseObj = actionHandler(...params);
+    } else if (handlerType === '[object GeneratorFunction]') {
+        promiseObj = co(actionHandler(...params));
+    } else if (handlerType === '[object Promise]') {
+        promiseObj = actionHandler;
+    } else if (handlerType === '[object Function]') {
+        const res = actionHandler(...params);
+        if (Object.prototype.toString.call(res) === '[object Promise]') {
+            promiseObj = res;
+        } else {
+            return dispatch(instance.actions[`${actionName}.$${actionStatuses.done}`](res));
+        }
     }
-};
 
-export const dispatch = async (actionName, ...params) => {
-    if (!instance.actions || !instance.store) throw 'Controllers not loaded yet';
-    if (typeof actionName !== 'string') throw 'action name should be a string';
-    if (typeof instance.actions[actionName] !== 'function') throw 'action does not exist';
-    return await dispatchAction(instance.store.dispatch, actionName, ...params);
+    if (promiseObj) {
+        promiseObj.then((res) => {
+            dispatch(instance.actions[`${actionName}.$${actionStatuses.done}`](res));
+        }).catch((err) => {
+            dispatch(instance.actions[`${actionName}.$${actionStatuses.error}`](error));
+        });
+    } else dispatch({ type: 'error', data: `unsupported action handler type: ${handlerType}` });
 }
+
+export const dispatch = (actionName, ...params) => {
+    return dispatchAction(instance.store.dispatch, actionName, ...params);    
+};
 
 // reducer
 const createReducer = (actionKeys, initState) => {
