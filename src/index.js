@@ -108,6 +108,7 @@ const createReducer = (actionKeys, initState) => {
     return (state = initState || {}, action) => {
         if (keys.indexOf(action.type) >= 0 ) {
             return Object.assign({}, state, action.data);
+            // return Object.assign(state, action.data);
         }
         return state;
     }
@@ -119,6 +120,65 @@ export const actionStatuses = {
     done: 'done', 
     error: 'error',
 };
+
+// Assemble pages
+const assemblePage = ({ connecter, withRouter, pageKey, combinePaths, reducerKeys, page, path }) => {
+    let levels = pageKey.split('.');
+    let pageSet = instance.pages;
+    let pageName = pageKey;
+    while (levels.length > 1) {
+        pageName = levels.shift();
+        if (!pageSet[pageName]) pageSet[pageName] = {};
+        pageSet = pageSet[pageName];
+    }
+    pageName = levels[0];
+    pageSet[pageName] = withRouter(connecter(
+        (state) => {
+            return (state = {}) => {
+                let targets = null; 
+                for (let key in combinePaths) {
+                    if (!combinePaths.hasOwnProperty(key)) continue;
+                    const p = combinePaths[key];
+                    if (!p) {
+                        if (key === `${prefix}this`) targets = state;
+                    } else {
+                        let x = state;
+                        let subkey = key;
+                        p.split('.').forEach(subp => {
+                            if (subp && x.hasOwnProperty(subp)) {
+                                x = x[subp];
+                                subkey = subp;
+                            }
+                        })
+                        if (!targets) targets = {};
+                        if (key === `${prefix}this`) {
+                            targets = x;
+                        } else if (isPrivateKey(key)) {
+                            targets[subkey] = x;
+                        } else {
+                            targets[key] = x;
+                        }
+                    }
+                }
+                return targets || {};
+            }
+        },
+        (dispatch) => {
+            const dispatchers = {};
+            if (reducerKeys) {
+                for (let key of reducerKeys) {
+                    const actionKey= (path) ? path + '.' + key : key;
+                    if (typeof instance.actions[actionKey] === 'function') {
+                        dispatchers[key] = async (...params) => {
+                            return await dispatchAction(dispatch, actionKey , ...params);
+                        }
+                    }
+                }
+            }
+            return dispatchers;
+        }
+    )(page));
+}
 // load setting of controllers
 export const load = (ctlrs, params) => {
     const { path, converter, connecter, withRouter } = Object.assign({
@@ -230,52 +290,8 @@ export const load = (ctlrs, params) => {
                 }
                 if (!instance.pages) instance.pages = {};
                 const pageKey = (path) ? path: indexKey;
-                instance.pages[pageKey] = withRouter(connecter(
-                    (state) => {
-                        return (state = {}) => {
-                            let targets = null; 
-                            for (let key in combinePaths) {
-                                if (!combinePaths.hasOwnProperty(key)) continue;
-                                const p = combinePaths[key];
-                                if (!p) {
-                                    if (key === `${prefix}this`) targets = state;
-                                } else {
-                                    let x = state;
-                                    let subkey = key;
-                                    p.split('.').forEach(subp => {
-                                        if (subp && x.hasOwnProperty(subp)) {
-                                            x = x[subp];
-                                            subkey = subp;
-                                        }
-                                    })
-                                    if (!targets) targets = {};
-                                    if (key === `${prefix}this`) {
-                                        targets = x;
-                                    } else if (isPrivateKey(key)) {
-                                        targets[subkey] = x;
-                                    } else {
-                                        targets[key] = x;
-                                    }
-                                }
-                            }
-                            return targets || {};
-                        }
-                    },
-                    (dispatch) => {
-                        const dispatchers = {};
-                        if (reducerKeys) {
-                            for (let key of reducerKeys) {
-                                const actionKey= (path) ? path + '.' + key : key;
-                                if (typeof instance.actions[actionKey] === 'function') {
-                                    dispatchers[key] = async (...params) => {
-                                        return await dispatchAction(dispatch, actionKey , ...params);
-                                    }
-                                }
-                            }
-                        }
-                        return dispatchers;
-                    }
-                )(instructors[`${prefix}page`]));
+                const page = instructors[`${prefix}page`];
+                assemblePage({ connecter, withRouter, pageKey, combinePaths, reducerKeys, page, path });
             }
         }
         loadedData = { isAction: false, reducer, state: subStates}
