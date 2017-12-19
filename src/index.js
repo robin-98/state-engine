@@ -229,7 +229,7 @@ const saveAction = (path, ctlrs) => {
     const key = path.split('.').pop();
     if (!ad[key]) {
         ad[key] = (...params) => {
-            return dispatchAction(path, ...params);
+            return dispatchAction(instance.store.dispatch, path, ...params);
         }
     }
     // set doing, done, error actions
