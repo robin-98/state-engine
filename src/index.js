@@ -13,6 +13,7 @@ const instance = {
     reducers: null,
     pages: null,
     store: null,
+    domains: null,
 }
 
 // Create store
@@ -108,7 +109,6 @@ const createReducer = (actionKeys, initState) => {
     return (state = initState || {}, action) => {
         if (keys.indexOf(action.type) >= 0 ) {
             return Object.assign({}, state, action.data);
-            // return Object.assign(state, action.data);
         }
         return state;
     }
@@ -179,6 +179,87 @@ const assemblePage = ({ connecter, withRouter, pageKey, combinePaths, reducerKey
         }
     )(page));
 }
+
+// Action domain
+class ActionDomain {
+    constructor(path) {
+        this.levels = path.split('.');
+        let key = this.levels.pop();
+        let domainPath  = null
+        let level = 0;
+        while (level < this.levels.length) {
+            key = this.levels[level++];
+            if (!domainPath) domainPath = key;
+            else domainPath += `.${key}`;
+        }
+        this.domain = domainPath;
+    }
+
+    getState(key) {
+        let state = instance.store.getState();
+        let level = 0;
+        while(level < this.levels.length) {
+            const k = this.levels[level++];
+            state = state[k];
+        }
+        if (key.indexOf('.') >0) {
+            const levels = key.split('.');
+            while(levels.length > 0) {
+                const k = levels.shift();
+                state = state[k];
+            }
+        } else {
+            state = state[key];
+        }
+        return state;
+    }
+}
+
+// Set action
+const saveAction = (path, ctlrs) => {
+    if (!instance.actions) instance.actions = {};
+    const handlerType = Object.prototype.toString.call(ctlrs);
+    let ad = new ActionDomain(path);
+    if (!instance.domains) instance.domains = {};
+    if (!instance.domains[ad.domain]) {
+        instance.domains[ad.domain] = ad;
+    } else {
+        ad = instance.domains[ad.domain];
+    }
+    const key = path.split('.').pop();
+    if (!ad[key]) {
+        ad[key] = (...params) => {
+            return dispatchAction(path, ...params);
+        }
+    }
+    // set doing, done, error actions
+    if (key) {
+        const statusKey = `${key}Status`;
+        const errorKey = `${key}Error`;
+        Object.keys(actionStatuses).forEach(status => {
+            const statusValue = actionStatuses[status];
+            const type = `${path}.$${status}`;
+            let data = {};
+            data[statusKey] = statusValue;
+            if (status === 'done') {
+                instance.actions[type] = (res) => {
+                    data = Object.assign(data, res);
+                    return { type, data };
+                }
+            } else if (status === 'error') {
+                instance.actions[type] = (err) => {
+                    data[errorKey] = err;
+                    return { type, data };
+                }
+            } else {
+                instance.actions[type] = () => ({ type, data });
+            }
+        })
+    }
+
+    instance.actions[path] = ctlrs.bind(ad);
+}
+
 // load setting of controllers
 export const load = (ctlrs, params) => {
     const { path, converter, connecter, withRouter } = Object.assign({
@@ -190,40 +271,11 @@ export const load = (ctlrs, params) => {
         withRouter: args => args,
     }, params);
     let loadedData = {isAction: false, reducer: null, state: null };
-    if (typeof ctlrs === 'function') {
+    if (typeof ctlrs === 'function' || Object.prototype.toString.call(ctlrs) === '[object Promise]') {
         if (!path || path === '') {
             instance.actions = ctlrs;
         } else {
-            const levels = path.split('.');
-            let key = null;
-            while (!key && levels.length > 0) {
-                key = levels.pop();
-            }
-            if (!instance.actions) instance.actions = {};
-            instance.actions[path] = ctlrs;
-            if (key) {
-                const statusKey = `${key}Status`;
-                const errorKey = `${key}Error`;
-                Object.keys(actionStatuses).forEach(status => {
-                    const statusValue = actionStatuses[status];
-                    const type = `${path}.$${status}`;
-                    let data = {};
-                    data[statusKey] = statusValue;
-                    if (status === 'done') {
-                        instance.actions[type] = (res) => {
-                            data = Object.assign(data, res);
-                            return { type, data };
-                        }
-                    } else if (status === 'error') {
-                        instance.actions[type] = (err) => {
-                            data[errorKey] = err;
-                            return { type, data };
-                        }
-                    } else {
-                        instance.actions[type] = () => ({ type, data });
-                    }
-                })
-            }
+            saveAction(path, ctlrs);
         }
         loadedData = { isAction: true, reducer: null, state: null };
     } else if (!Array.isArray(ctlrs) 
