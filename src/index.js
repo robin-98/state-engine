@@ -346,6 +346,7 @@ export const load = (ctlrs, params) => {
                 assemblePage({ connecter, withRouter, pageKey, combinePaths, reducerKeys, page, path });
             }
         }
+        if (!reducer && !subStates) subStates = {};
         loadedData = { isAction: false, reducer, state: subStates}
     } else if (typeof converter === 'function') {
         const convertedValue = converter(ctlrs);
