@@ -1,10 +1,10 @@
 {
-  "name": "@mtfe/state-engine",
-  "version": "0.0.28",
+  "name": "state-engine",
+  "version": "1.0.0",
   "description": "spa state engine based on redux",
   "repository": {
     "type": "git",
-    "url": "ssh://git@git.sankuai.com/~sunlin06/state-engine.git"
+    "url": "git@github.com:robin-98/state-engine.git"
   },
   "engines": {
     "node": ">= 8.0.0"
@@ -20,8 +20,8 @@
     "async"
   ],
   "author": {
-    "name": "Lyall Sun",
-    "email": "sunlin06@meituan.com"
+    "name": "Robin Sun",
+    "email": "robin@naturewake.com"
   },
   "license": "MIT",
   "dependencies": {
