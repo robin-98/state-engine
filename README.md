@@ -30,7 +30,7 @@ export default {
 ```
 ###### 加载 controllers
 ```javascript
-import * as engine from '@mtfe/state-engine';
+import * as engine from 'state-engine';
 
 import { connect } from 'react-redux';
 import { withRouter } from 'react-router-dom';
