@@ -13,15 +13,7 @@ import co from 'co';
 export let indexKey = '__index__';
 export let prefix = '$';
 
-interface Instance {
-    actions: any
-    reducers: any
-    pages: any
-    store: any
-    domains: any
-}
-
-const instance: Instance = {
+const instance = {
     actions: null,
     reducers: null,
     pages: null,
