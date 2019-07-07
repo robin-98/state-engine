@@ -1,6 +1,6 @@
 {
   "name": "state-engine",
-  "version": "1.0.0",
+  "version": "2.0.0-alpha1",
   "description": "spa state engine based on redux",
   "repository": {
     "type": "git",
@@ -11,13 +11,13 @@
   },
   "main": "./lib/index.js",
   "scripts": {
-    "build": "babel -d ./lib ./src",
+    "build": "tsc --build",
     "prepublish": "npm run build && rm -f ./package-lock.json"
   },
   "keywords": [
     "redux",
-    "es6",
-    "async"
+    "state engine",
+    "typescript"
   ],
   "author": {
     "name": "Robin Sun",
@@ -25,14 +25,14 @@
   },
   "license": "MIT",
   "dependencies": {
-    "babel-preset-react": "^6.24.1",
+    "@types/co": "^4.6.2",
+    "@types/redux": "^3.6.0",
+    "@types/redux-thunk": "^2.1.0",
     "co": "^4.6.0",
-    "redux": "^3.7.2",
-    "redux-thunk": "^2.2.0"
+    "redux": "^4.0.1",
+    "redux-thunk": "^2.3.0"
   },
   "devDependencies": {
-    "babel-cli": "^6.26.0",
-    "babel-plugin-transform-runtime": "^6.23.0",
-    "babel-preset-env": "^1.6.1"
+    "typescript": "^3.5.2"
   }
 }

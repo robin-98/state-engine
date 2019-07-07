@@ -38,9 +38,6 @@ jspm_packages
 
 # Workspace
 .idea
-.bash_env.config
 package-lock.json
 tmp/
-mkpub
-mkmt
 lib

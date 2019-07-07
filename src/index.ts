@@ -1,6 +1,11 @@
 /**
- * Created by sunlin on 16/03/2017.
+ * @author Robin Sun
+ * @email robin@naturewake.com
+ * @create date 2019-07-07 15:18:09
+ * @modify date 2019-07-07 15:18:09
+ * @desc [description]
  */
+
 import thunkMiddleware from 'redux-thunk';
 import { createStore, applyMiddleware, combineReducers } from 'redux';
 import co from 'co';
@@ -8,7 +13,15 @@ import co from 'co';
 export let indexKey = '__index__';
 export let prefix = '$';
 
-const instance = {
+interface Instance {
+    actions: any
+    reducers: any
+    pages: any
+    store: any
+    domains: any
+}
+
+const instance: Instance = {
     actions: null,
     reducers: null,
     pages: null,
@@ -16,8 +29,12 @@ const instance = {
     domains: null,
 }
 
+declare global {
+    interface Window { __REDUX_DEVTOOLS_EXTENSION__: any; }
+}
+
 // Create store
-const createStoreInstance = (useReduxTool, ...middlewares) => {
+const createStoreInstance = (useReduxTool:any, ...middlewares: any[]) => {
     if (instance.store) return instance.store;
     if (!instance.reducers) return null;
     if (useReduxTool) {
@@ -133,7 +150,7 @@ const assemblePage = ({ connecter, withRouter, pageKey, combinePaths, reducerKey
     }
     pageName = levels[0];
     pageSet[pageName] = withRouter(connecter(
-        (state) => {
+        (state: any) => {
             return (state = {}) => {
                 let targets = null; 
                 for (let key in combinePaths) {
@@ -182,7 +199,10 @@ const assemblePage = ({ connecter, withRouter, pageKey, combinePaths, reducerKey
 
 // Action domain
 class ActionDomain {
-    constructor(path) {
+    levels: string[]
+    domain: string
+
+    constructor(path: string) {
         this.levels = path.split('.');
         let key = this.levels.pop();
         let domainPath  = null
@@ -195,7 +215,7 @@ class ActionDomain {
         this.domain = domainPath;
     }
 
-    getState(key) {
+    getState(key: string) {
         let state = instance.store.getState();
         let level = 0;
         while(level < this.levels.length) {
@@ -218,7 +238,7 @@ class ActionDomain {
 // Set action
 const saveAction = (path, ctlrs) => {
     if (!instance.actions) instance.actions = {};
-    const handlerType = Object.prototype.toString.call(ctlrs);
+    // const handlerType = Object.prototype.toString.call(ctlrs);
     let ad = new ActionDomain(path);
     if (!instance.domains) instance.domains = {};
     if (!instance.domains[ad.domain]) {
@@ -228,7 +248,7 @@ const saveAction = (path, ctlrs) => {
     }
     const key = path.split('.').pop();
     if (!ad[key]) {
-        ad[key] = (...params) => {
+        ad[key] = (...params: any[]) => {
             return dispatchAction(instance.store.dispatch, path, ...params);
         }
     }
