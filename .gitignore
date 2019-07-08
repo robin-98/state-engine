@@ -41,3 +41,4 @@ jspm_packages
 package-lock.json
 tmp/
 lib
+tsconfig-localbuild.json

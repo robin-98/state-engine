@@ -10,10 +10,48 @@ import thunkMiddleware from 'redux-thunk';
 import { createStore, applyMiddleware, combineReducers } from 'redux';
 import co from 'co';
 
-export let indexKey = '__index__';
-export let prefix = '$';
+const indexKey = '__INDEX__';
+const prefix = '$';
+const isPrivateKey = (key: any) => (typeof key === 'string' && key.length > prefix.length && key.slice(0, prefix.length) === prefix);
 
-const instance = {
+interface Action { type: string, data: string}
+// interface ActionHandler { (): Action }
+interface Dispatcher {(action: Action): any}
+// interface Reducer { (state: any, action: Action): any}
+export enum ActionStatuses {
+    doing = 'doing', 
+    done = 'done', 
+    error = 'error',
+};
+
+interface PageSet {
+    [key: string]: PageSet|any
+}
+interface Instance {
+    actions: {[key: string]: any}|null  // four kinds of action handlers: doing, done, error, and the action true handler
+    reducers: any
+    pages: PageSet|null
+    store: any
+    domains: any
+}
+
+interface AssemblePage {
+    (params: {
+        connecter: any,
+        withRouter: any,
+        pageKey: string, 
+        combinePaths: {[key: string]: string}, 
+        reducerKeys: string[],
+        page: any,
+        path: string
+    }): any
+}
+
+declare global {
+    interface Window { __REDUX_DEVTOOLS_EXTENSION__: any; }
+}
+
+const instance: Instance = {
     actions: null,
     reducers: null,
     pages: null,
@@ -21,8 +59,42 @@ const instance = {
     domains: null,
 }
 
-declare global {
-    interface Window { __REDUX_DEVTOOLS_EXTENSION__: any; }
+// Action domain
+class ActionDomain {
+    levels: string[]
+    domain: string
+
+    constructor(path: string) {
+        this.levels = path.split('.');
+        let key = this.levels.pop();    // the last one is not useful
+        let domainPath  = ''
+        let level = 0;
+        while (level < this.levels.length) {
+            key = this.levels[level++];
+            if (!domainPath) domainPath = key;
+            else domainPath += `.${key}`;
+        }
+        this.domain = domainPath;
+    }
+
+    getState(key: string) {
+        let state = instance.store.getState();
+        let level = 0;
+        while(level < this.levels.length) {
+            const k = this.levels[level++];
+            state = state[k];
+        }
+        if (key.indexOf('.') >0) {
+            const levels = key.split('.');
+            while(levels.length > 0) {
+                const k = levels.shift()!;
+                state = state[k];
+            }
+        } else {
+            state = state[key];
+        }
+        return state;
+    }
 }
 
 // Create store
@@ -52,15 +124,16 @@ const createStoreInstance = (useReduxTool:any, ...middlewares: any[]) => {
     return instance.store;
 };
 
-export const store = (...middlewares) => {
+export const store = (...middlewares: any[]) => {
     return createStoreInstance(false, ...middlewares);
 }
 
-export const storeWithTools = (...middlewares) => {
+export const storeWithTools = (...middlewares: any[]) => {
     return createStoreInstance(true, ...middlewares);
 }
 
-const dispatchAction = (dispatch, actionName, ...params) => {
+// dispatch any action according to its name, with a provided dispatcher
+const dispatchAction = (dispatch: Dispatcher, actionName: string, ...params: any[]): Promise<any>|any => {
     if (!instance.actions || !instance.store) 
         return dispatch({ type: 'error', data: 'Controllers not loaded yet'});
 
@@ -69,11 +142,16 @@ const dispatchAction = (dispatch, actionName, ...params) => {
     
     if (typeof instance.actions[actionName] !== 'function') 
         return dispatch({type: 'error', data: 'action does not exist'});
+        
+    // Dispatch the action of 'doing', not the action itself,
+    // here is just to indicate the action is going to be in 'doing' status
+    // not the actual execution of the action
+    dispatch(instance.actions[`${actionName}.$${ActionStatuses.doing}`]());
 
+    // Execute the true action, according to its tpye: async, generator, promise, or pure function
     const actionHandler = instance.actions[actionName];
     const handlerType = Object.prototype.toString.call(actionHandler);
     let promiseObj = null;
-    dispatch(instance.actions[`${actionName}.$${actionStatuses.doing}`]());
     if (handlerType === '[object AsyncFunction]') {
         promiseObj = actionHandler(...params);
     } else if (handlerType === '[object GeneratorFunction]') {
@@ -86,36 +164,41 @@ const dispatchAction = (dispatch, actionName, ...params) => {
             if (Object.prototype.toString.call(res) === '[object Promise]') {
                 promiseObj = res;
             } else {
-                dispatch(instance.actions[`${actionName}.$${actionStatuses.done}`](res));
+                // to indicate the action is done, with the response = res
+                dispatch(instance.actions[`${actionName}.$${ActionStatuses.done}`](res));
                 return Promise.resolve(res);
             }
         } catch (err) {
-            dispatch(instance.actions[`${actionName}.$${actionStatuses.error}`](err));
+            // to indicate the action is broken with error
+            dispatch(instance.actions[`${actionName}.$${ActionStatuses.error}`](err));
             return Promise.reject(err);
         }
     }
     if (promiseObj) {
-        return promiseObj.then((res, err) => {
-            dispatch(instance.actions[`${actionName}.$${actionStatuses.done}`](res));
+        return promiseObj.then((res: any) => {
+            // to indicate the action is done, with the response = res
+            dispatch(instance.actions![`${actionName}.$${ActionStatuses.done}`](res));
             return res;
-        }).catch((err) => {
-            dispatch(instance.actions[`${actionName}.$${actionStatuses.error}`](err));
+        }).catch((err: any) => {
+            // to indicate the action is broken with error
+            dispatch(instance.actions![`${actionName}.$${ActionStatuses.error}`](err));
             throw err;
         });
     } else dispatch({ type: 'error', data: `unsupported action handler type: ${handlerType}` });
 }
 
-export const dispatch = (actionName, ...params) => {
+// using redux default dispatcher to dispatch actions according to its absolute path(name)
+export const dispatch = (actionName: string, ...params: any[]) => {
     return dispatchAction(instance.store.dispatch, actionName, ...params);    
 };
 
-// reducer
-const createReducer = (actionKeys, initState) => {
+// reducer, make the execution of any action handlers to update the current node state
+const createReducer = (actionKeys: string[]|string, initState: any) => {
     let keys = actionKeys;
     if (!Array.isArray(actionKeys) && typeof actionKeys === 'string') {
         keys = [actionKeys];
     }
-    return (state = initState || {}, action) => {
+    return (state = initState || {}, action: Action) => {
         if (keys.indexOf(action.type) >= 0 ) {
             return Object.assign({}, state, action.data);
         }
@@ -123,112 +206,78 @@ const createReducer = (actionKeys, initState) => {
     }
 };
 
-const isPrivateKey = (key) => (typeof key === 'string' && key.length > prefix.length && key.slice(0, prefix.length) === prefix);
-export const actionStatuses = {
-    doing: 'doing', 
-    done: 'done', 
-    error: 'error',
-};
-
 // Assemble pages
-const assemblePage = ({ connecter, withRouter, pageKey, combinePaths, reducerKeys, page, path }) => {
+
+const assemblePage: AssemblePage = ({ connecter, withRouter, pageKey, combinePaths, reducerKeys, page, path }) => {
     let levels = pageKey.split('.');
-    let pageSet = instance.pages;
+    let pageSet = instance.pages!;
     let pageName = pageKey;
     while (levels.length > 1) {
-        pageName = levels.shift();
+        pageName = levels.shift()!;
         if (!pageSet[pageName]) pageSet[pageName] = {};
         pageSet = pageSet[pageName];
     }
     pageName = levels[0];
     pageSet[pageName] = withRouter(connecter(
-        (state: any) => {
-            return (state = {}) => {
-                let targets = null; 
-                for (let key in combinePaths) {
-                    if (!combinePaths.hasOwnProperty(key)) continue;
-                    const p = combinePaths[key];
-                    if (!p) {
-                        if (key === `${prefix}this`) targets = state;
-                    } else {
-                        let x = state;
-                        let subkey = key;
-                        p.split('.').forEach(subp => {
-                            if (subp && x.hasOwnProperty(subp)) {
-                                x = x[subp];
-                                subkey = subp;
-                            }
-                        })
-                        if (!targets) targets = {};
-                        if (key === `${prefix}this`) {
-                            targets = x;
-                        } else if (isPrivateKey(key)) {
-                            targets[subkey] = x;
-                        } else {
-                            targets[key] = x;
+        // using the interface of default connect function of redux
+        // mapStateToProps?: (state, ownProps?) => Object
+        (state: any = {}) => {
+            let targets = null; 
+            for (let key in combinePaths) {
+                if (!combinePaths.hasOwnProperty(key)) continue;
+                const p = combinePaths[key];
+                if (!p) {
+                    if (key === `${prefix}this`) targets = state;
+                } else {
+                    let x = state;
+                    let subkey = key;
+                    p.split('.').forEach(subp => {
+                        if (subp && x.hasOwnProperty(subp)) {
+                            x = x[subp];
+                            subkey = subp;
                         }
+                    })
+                    if (!targets) targets = {};
+                    if (key === `${prefix}this`) {
+                        targets = x;
+                    } else if (isPrivateKey(key)) {
+                        targets[subkey] = x;
+                    } else {
+                        targets[key] = x;
                     }
                 }
-                return targets || {};
             }
+            return targets || {};
         },
-        (dispatch) => {
-            const dispatchers = {};
+        // mapDispatchToProps?: Object | (dispatch, ownProps?) => Object
+        (dispatch: Dispatcher) => {
+            const dispatchers: {[key: string]: any} = {};
             if (reducerKeys) {
                 for (let key of reducerKeys) {
                     const actionKey= (path) ? path + '.' + key : key;
-                    if (typeof instance.actions[actionKey] === 'function') {
-                        dispatchers[key] = async (...params) => {
-                            return await dispatchAction(dispatch, actionKey , ...params);
+                    if (typeof instance.actions![actionKey] === 'function') {
+                        // dispatchers[key] = async (...params: any[]) => {
+                        //     return await dispatchAction(dispatch, actionKey , ...params);
+                        // }
+                        // Maybe no need to use async at outside,
+                        // if user knows the action is async, it will be awaited explicitly
+                        dispatchers[key] = (...params: any[]) => {
+                            return dispatchAction(dispatch, actionKey , ...params);
                         }
                     }
                 }
             }
             return dispatchers;
         }
+        // mergeProps,
+        // options
     )(page));
 }
 
-// Action domain
-class ActionDomain {
-    levels: string[]
-    domain: string
 
-    constructor(path: string) {
-        this.levels = path.split('.');
-        let key = this.levels.pop();
-        let domainPath  = null
-        let level = 0;
-        while (level < this.levels.length) {
-            key = this.levels[level++];
-            if (!domainPath) domainPath = key;
-            else domainPath += `.${key}`;
-        }
-        this.domain = domainPath;
-    }
-
-    getState(key: string) {
-        let state = instance.store.getState();
-        let level = 0;
-        while(level < this.levels.length) {
-            const k = this.levels[level++];
-            state = state[k];
-        }
-        if (key.indexOf('.') >0) {
-            const levels = key.split('.');
-            while(levels.length > 0) {
-                const k = levels.shift();
-                state = state[k];
-            }
-        } else {
-            state = state[key];
-        }
-        return state;
-    }
-}
 
 // Set action
-const saveAction = (path, ctlrs) => {
+const saveAction = (path: string, ctlrs: any) => {
     if (!instance.actions) instance.actions = {};
     // const handlerType = Object.prototype.toString.call(ctlrs);
     let ad = new ActionDomain(path);
@@ -248,8 +297,8 @@ const saveAction = (path, ctlrs) => {
     if (key) {
         const statusKey = `${key}Status`;
         const errorKey = `${key}Error`;
-        Object.keys(actionStatuses).forEach(status => {
-            const statusValue = actionStatuses[status];
+        Object.keys(ActionStatuses).forEach(status => {
+            const statusValue = ActionStatuses[status];
             const type = `${path}.$${status}`;
             let data = {};
             data[statusKey] = statusValue;
@@ -273,7 +322,7 @@ const saveAction = (path, ctlrs) => {
 }
 
 // load setting of controllers
-export const load = (ctlrs, params) => {
+export const load = (ctlrs, params): any => {
     const { path, converter, connecter, withRouter } = Object.assign({
         path: '',
         converter: prop => () => prop,
@@ -311,7 +360,7 @@ export const load = (ctlrs, params) => {
                         if (!reducerKeys) reducerKeys = [];
                         reducerKeys.push(key);
                         if (!actionPaths) actionPaths = [];
-                        Object.keys(actionStatuses).forEach(s => {
+                        Object.keys(ActionStatuses).forEach(s => {
                             actionPaths.push(`${p}.$${s}`);
                         })
                         actionPaths.push(p);
@@ -375,5 +424,7 @@ export const load = (ctlrs, params) => {
         return instance.pages;
     }
 
+    console.log('load controller:', ctlrs, 'parameters:', params, 'loaded data:', loadedData)
+    console.log('instance:', instance)
     return loadedData;
 }

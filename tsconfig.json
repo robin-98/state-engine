@@ -2,7 +2,7 @@
     "compileOnSave": true,
     "compilerOptions": {
         "module": "commonjs",
-        // "strict": true,
+        "strict": true,
         "removeComments": true,
         "preserveConstEnums": true,
         "sourceMap": true,
@@ -12,7 +12,7 @@
         "declaration": true,
         "declarationMap": true,
         "noUnusedLocals": true,
-        // "noUnusedParameters": true,
+        "noUnusedParameters": true,
         "target": "es5",
         "lib": ["es2015", "dom"],
         "declarationDir": "lib",
