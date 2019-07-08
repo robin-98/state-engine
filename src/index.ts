@@ -35,18 +35,6 @@ interface Instance {
     domains: any
 }
 
-interface AssemblePage {
-    (params: {
-        connecter: any,
-        withRouter: any,
-        pageKey: string, 
-        combinePaths: {[key: string]: string}, 
-        reducerKeys: string[],
-        page: any,
-        path: string
-    }): any
-}
-
 declare global {
     interface Window { __REDUX_DEVTOOLS_EXTENSION__: any; }
 }
@@ -87,7 +75,6 @@ const createStoreInstance = (useReduxTool:any, ...middlewares: any[]) => {
             )
         )
     }
-    console.log('states:', instance.store.getState())
     return instance.store;
 };
 
@@ -174,7 +161,17 @@ const createReducer = (actionKeys: string[]|string, initState: any) => {
 };
 
 // Assemble pages
-
+interface AssemblePage {
+    (params: {
+        connecter: any,
+        withRouter: any,
+        pageKey: string, 
+        combinePaths: {[key: string]: string}, 
+        reducerKeys: string[]|null,
+        page: any,
+        path: string
+    }): any
+}
 const assemblePage: AssemblePage = ({ connecter, withRouter, pageKey, combinePaths, reducerKeys, page, path }) => {
     let levels = pageKey.split('.');
     let pageSet = instance.pages!;
@@ -214,7 +211,6 @@ const assemblePage: AssemblePage = ({ connecter, withRouter, pageKey, combinePat
                     }
                 }
             }
-            console.log('path:', path, 'reducer keys:', reducerKeys, 'page key:', pageKey, 'combine paths:', combinePaths, 'targets:', targets)
             return targets || {};
         },
         // mapDispatchToProps?: Object | (dispatch, ownProps?) => Object
@@ -305,7 +301,7 @@ const saveAction = (path: string, ctlrs: any) => {
         const statusKey = `${key}Status`;
         const errorKey = `${key}Error`;
         Object.keys(ActionStatuses).forEach((status: string) => {
-            const statusValue = ActionStatuses[status];
+            const statusValue = ActionStatuses[status as keyof typeof ActionStatuses];
             const type = `${path}.$${status}`;
             let data: {[key:string]: any} = {};
             data[statusKey] = statusValue;
@@ -336,7 +332,7 @@ export const load = (ctlrs: any, params: any): any => {
         connecter: () => (page: any) => page,
         withRouter: (args: any) => args,
     }, params);
-    let loadedData = {isAction: false, reducer: null, state: null };
+    let loadedData: {isAction: boolean, reducer: any, state: any} = {isAction: false, reducer: null, state: null };
     
     if (typeof ctlrs === 'function' || Object.prototype.toString.call(ctlrs) === '[object Promise]') {
         if (!path || path === '') {
