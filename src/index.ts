@@ -59,52 +59,18 @@ const instance: Instance = {
     domains: null,
 }
 
-// Action domain
-class ActionDomain {
-    levels: string[]
-    domain: string
-
-    constructor(path: string) {
-        this.levels = path.split('.');
-        let key = this.levels.pop();    // the last one is not useful
-        let domainPath  = ''
-        let level = 0;
-        while (level < this.levels.length) {
-            key = this.levels[level++];
-            if (!domainPath) domainPath = key;
-            else domainPath += `.${key}`;
-        }
-        this.domain = domainPath;
-    }
-
-    getState(key: string) {
-        let state = instance.store.getState();
-        let level = 0;
-        while(level < this.levels.length) {
-            const k = this.levels[level++];
-            state = state[k];
-        }
-        if (key.indexOf('.') >0) {
-            const levels = key.split('.');
-            while(levels.length > 0) {
-                const k = levels.shift()!;
-                state = state[k];
-            }
-        } else {
-            state = state[key];
-        }
-        return state;
-    }
-}
+// export class StateEngine {
+    
+// }
 
 // Create store
 const createStoreInstance = (useReduxTool:any, ...middlewares: any[]) => {
     if (instance.store) return instance.store;
-    if (!instance.reducers) return null;
+    const emptyReducer = (state: any) => state;
     if (useReduxTool) {
         /* eslint-disable no-underscore-dangle */
         instance.store = createStore(
-            instance.reducers,
+            instance.reducers || emptyReducer,
             window.__REDUX_DEVTOOLS_EXTENSION__ && window.__REDUX_DEVTOOLS_EXTENSION__(),
             applyMiddleware(
                 thunkMiddleware,
@@ -114,13 +80,14 @@ const createStoreInstance = (useReduxTool:any, ...middlewares: any[]) => {
         /* eslint-enable */
     } else {
         instance.store = createStore(
-            instance.reducers,
+            instance.reducers || emptyReducer,
             applyMiddleware(
                 thunkMiddleware,
                 ...middlewares,
             )
         )
     }
+    console.log('states:', instance.store.getState())
     return instance.store;
 };
 
@@ -247,6 +214,7 @@ const assemblePage: AssemblePage = ({ connecter, withRouter, pageKey, combinePat
                     }
                 }
             }
+            console.log('path:', path, 'reducer keys:', reducerKeys, 'page key:', pageKey, 'combine paths:', combinePaths, 'targets:', targets)
             return targets || {};
         },
         // mapDispatchToProps?: Object | (dispatch, ownProps?) => Object
@@ -274,7 +242,46 @@ const assemblePage: AssemblePage = ({ connecter, withRouter, pageKey, combinePat
     )(page));
 }
 
+// Action domain
 
+class ActionDomain {
+    levels: string[]
+    domain: string
+
+    constructor(path: string) {
+        this.levels = path.split('.');
+        let key = this.levels.pop();    // the last one is not useful
+        let domainPath  = ''
+        let level = 0;
+        while (level < this.levels.length) {
+            key = this.levels[level++];
+            if (!domainPath) domainPath = key;
+            else domainPath += `.${key}`;
+        }
+        this.domain = domainPath;
+    }
+
+    getState(key: string) {
+        let state = instance.store.getState();
+        let level = 0;
+        while(level < this.levels.length) {
+            const k = this.levels[level++];
+            state = state[k];
+        }
+        if (key.indexOf('.') >0) {
+            const levels = key.split('.');
+            while(levels.length > 0) {
+                const k = levels.shift()!;
+                state = state[k];
+            }
+        } else {
+            state = state[key];
+        }
+        return state;
+    }
+
+    [key: string]:any;
+}
 
 // Set action
 const saveAction = (path: string, ctlrs: any) => {
@@ -288,8 +295,8 @@ const saveAction = (path: string, ctlrs: any) => {
         ad = instance.domains[ad.domain];
     }
     const key = path.split('.').pop();
-    if (!ad[key]) {
-        ad[key] = (...params: any[]) => {
+    if (!ad[key!]) {
+        ad[key!] = (...params: any[]) => {
             return dispatchAction(instance.store.dispatch, path, ...params);
         }
     }
@@ -297,23 +304,23 @@ const saveAction = (path: string, ctlrs: any) => {
     if (key) {
         const statusKey = `${key}Status`;
         const errorKey = `${key}Error`;
-        Object.keys(ActionStatuses).forEach(status => {
+        Object.keys(ActionStatuses).forEach((status: string) => {
             const statusValue = ActionStatuses[status];
             const type = `${path}.$${status}`;
-            let data = {};
+            let data: {[key:string]: any} = {};
             data[statusKey] = statusValue;
             if (status === 'done') {
-                instance.actions[type] = (res) => {
+                instance.actions![type] = (res:any) => {
                     data = Object.assign(data, res);
                     return { type, data };
                 }
             } else if (status === 'error') {
-                instance.actions[type] = (err) => {
+                instance.actions![type] = (err: any) => {
                     data[errorKey] = err;
                     return { type, data };
                 }
             } else {
-                instance.actions[type] = () => ({ type, data });
+                instance.actions![type] = () => ({ type, data });
             }
         })
     }
@@ -322,16 +329,15 @@ const saveAction = (path: string, ctlrs: any) => {
 }
 
 // load setting of controllers
-export const load = (ctlrs, params): any => {
+export const load = (ctlrs: any, params: any): any => {
     const { path, converter, connecter, withRouter } = Object.assign({
         path: '',
-        converter: prop => () => prop,
-        connecter: () => {
-            return page => page;
-        },
-        withRouter: args => args,
+        converter: (prop: any) => prop,
+        connecter: () => (page: any) => page,
+        withRouter: (args: any) => args,
     }, params);
     let loadedData = {isAction: false, reducer: null, state: null };
+    
     if (typeof ctlrs === 'function' || Object.prototype.toString.call(ctlrs) === '[object Promise]') {
         if (!path || path === '') {
             instance.actions = ctlrs;
@@ -343,37 +349,36 @@ export const load = (ctlrs, params): any => {
                 && Object.prototype.toString.call(ctlrs) === '[object Object]'
             ) {
         let actionPaths = null;
-        let subReducers = null;
-        let instructors = null;
+        let subReducers: {[key:string]:any}|null = null;
+        let instructors: {[key:string]:any}|null = null;
         let reducerKeys = null;
-        let subStates = null;
+        let subStates: {[key:string]:any}|null = null;
         for (let key in ctlrs) {
-            if (ctlrs.hasOwnProperty(key)) {
-                if (isPrivateKey(key)) {
-                    if (!instructors) instructors = {};
-                    instructors[key] = ctlrs[key];
-                } else {
-                    const p = (path) ? path + '.' + key : key;
-                    const result = load(ctlrs[key], { path: p, converter, connecter, withRouter });
-                    const { isAction, reducer, state } = result;
-                    if (isAction) {
-                        if (!reducerKeys) reducerKeys = [];
-                        reducerKeys.push(key);
-                        if (!actionPaths) actionPaths = [];
-                        Object.keys(ActionStatuses).forEach(s => {
-                            actionPaths.push(`${p}.$${s}`);
-                        })
-                        actionPaths.push(p);
-                    } else  if(reducer) {
-                        if (!subReducers) subReducers = {};
-                        subReducers[key] = reducer;
-                    } 
-                    // State is combined with reducers, so they could exist at the same time
-                    if (state !== null) {
-                        if (!subStates) subStates = {};
-                        subStates[key] = state;
-                    }
-                }
+            if (!ctlrs.hasOwnProperty(key)) continue
+            if (isPrivateKey(key)) {
+                if (!instructors) instructors = {};
+                instructors[key] = ctlrs[key];
+                continue
+            }
+            const p = (path) ? path + '.' + key : key;
+            const result = load(ctlrs[key], { path: p, converter, connecter, withRouter });
+            const { isAction, reducer, state } = result;
+            if (isAction) {
+                if (!reducerKeys) reducerKeys = [];
+                reducerKeys.push(key);
+                if (!actionPaths) actionPaths = [];
+                Object.keys(ActionStatuses).forEach(s => {
+                    actionPaths.push(`${p}.$${s}`);
+                })
+                actionPaths.push(p);
+            } else  if(reducer) {
+                if (!subReducers) subReducers = {};
+                subReducers[key] = reducer;
+            } 
+            // State is combined with reducers, so they could exist at the same time
+            if (state !== null) {
+                if (!subStates) subStates = {};
+                subStates[key] = state;
             }
         }
         let reducer = (actionPaths) ? createReducer(actionPaths, subStates) : null;
@@ -387,7 +392,7 @@ export const load = (ctlrs, params): any => {
         // Connect page
         if (instructors) {
             if (typeof connecter === 'function' && instructors[`${prefix}page`]) {
-                let combinePaths = { }
+                let combinePaths: {[key:string]:any} = { }
                 combinePaths[`${prefix}this`] = path;
                 if (instructors[`${prefix}combine`]) {
                     const combine = instructors[`${prefix}combine`];
@@ -396,6 +401,7 @@ export const load = (ctlrs, params): any => {
                             combinePaths[`${prefix}that_${i}`] = p;
                         })
                     } else if (typeof combine === 'object') {
+                        // TODO: this maybe incorrect
                         combinePaths = Object.assign(combinePaths, combine);
                     } else if (typeof combine === 'string') {
                         combinePaths[`${prefix}that`] = combine;
@@ -423,8 +429,5 @@ export const load = (ctlrs, params): any => {
     if (!path) {
         return instance.pages;
     }
-
-    console.log('load controller:', ctlrs, 'parameters:', params, 'loaded data:', loadedData)
-    console.log('instance:', instance)
     return loadedData;
 }
