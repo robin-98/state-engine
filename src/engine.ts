@@ -9,7 +9,7 @@ import { combineReducers } from 'redux'
 import { 
     KeyValue, getPropPath, mergeStateToProps, mergeDispatchToProps, combineSubReducers,
     getActionNameByStatus, ActionStatus, createNaiveReducer,
-    checkPropertyType, PropertyType, checkActionType, ActionType
+    checkPropertyType, PropertyType, checkActionType, ActionType, ActionScope
 } from './stateSpace'
 import co from 'co'
 
@@ -42,7 +42,7 @@ interface ConnectView {
     connecter: any
     withRouter: any
     combines: any
-    originalActions: any
+    actionScope: ActionScope
     view: any 
 }
 
@@ -52,7 +52,7 @@ export interface ViewAssembler {
 
 export class StateEngineBase {
 
-    protected actionCache: Map<string, any>
+    protected actionCache: Map<string, {name: string, actionScope: ActionScope, expandedActions: KeyValue}>
     protected pathCache: Map<string, string>
     public reducer: any
     public initState: KeyValue
@@ -60,7 +60,7 @@ export class StateEngineBase {
     public view: any
 
     constructor() {
-        this.actionCache = new Map<string, any>()
+        this.actionCache = new Map<string, {name: string, actionScope: ActionScope, expandedActions: KeyValue}>()
         this.pathCache = new Map<string, string>()
         this.reducer = null
         this.initState = {}
@@ -75,10 +75,20 @@ export class StateEngineBase {
         else return false
     }
 
-    protected cacheActions(currentPath: string, actions: KeyValue) {
-        for (let actionName in actions) {
+    protected cacheActions(currentPath: string, actionScope: ActionScope, expandedActions: KeyValue) {
+        for (let actionName in expandedActions) {
             const actionPath = getPropPath(currentPath, actionName)
-            this.actionCache.set(actionPath, actions[actionName])
+            this.actionCache.set(actionPath, {name: actionName, actionScope, expandedActions})
+        }
+    }
+
+    protected getActionByPath(path: string) {
+        const cache = this.actionCache.get(path)
+        if (!cache) return null
+        else if (cache.actionScope.hasAction(cache.name)) {
+            return cache.actionScope.getAction(cache.name)
+        } else {
+            return cache.expandedActions[cache.name]
         }
     }
 
@@ -110,10 +120,13 @@ export class StateEngineBase {
                     data[`${actionName}.status`] = ActionStatus[status as keyof typeof ActionStatus]
                     if (status === ActionStatus.error) {
                         data[`${actionName}.error`] = payload 
-                    } else if (status === ActionStatus.done && this.isInternalAction(actionName) && payload && typeof payload === 'object') {
-                        data = Object.assign({}, payload)
+                    // } else if (status === ActionStatus.done && this.isInternalAction(actionName) && payload && typeof payload === 'object') {
+                    //     data = Object.assign({}, data, payload)
                     } else if (status === ActionStatus.done) {
                         data[`${actionName}.response`] = payload
+                        if (payload && typeof payload === 'object') {
+                            data = Object.assign({}, data, payload)
+                        }
                     }
                     return { type: statusActionPath, data }
                 }
@@ -121,11 +134,11 @@ export class StateEngineBase {
         }
     }
 
-    protected connectView ({ currentPath, connecter, withRouter, combines, originalActions, view }: ConnectView) {
+    protected connectView ({ currentPath, connecter, withRouter, combines, actionScope, view }: ConnectView) {
         // using the interface of default connect function of redux
         const connectedView = connecter(
-            mergeStateToProps(currentPath, combines),
-            mergeDispatchToProps(this.dispatch.bind(this), currentPath, originalActions)
+            mergeStateToProps(currentPath, combines, actionScope),
+            mergeDispatchToProps(this.dispatch.bind(this), currentPath, actionScope)
             /* mergeProps,  options */
         )(view)
         return withRouter(connectedView)
@@ -181,19 +194,20 @@ export class StateEngineBase {
         }
 
         // Connect view using original actions
+        const actionScope = new ActionScope(currentPath, actions)
         let currentView = this.connectView({
             currentPath, connecter, withRouter,
             combines: $combine, 
-            originalActions: actions,
+            actionScope,
             view: (Object.keys(subviews).length > 0)? viewAssembler($view, subviews) : $view
         })
 
         // expand actions
         this.expandActions(currentPath, actions)
-        this.cacheActions(currentPath, actions)
+        this.cacheActions(currentPath, actionScope, actions)
 
         const currentReducer = (Object.keys(actions).length > 0)
-                        ? createNaiveReducer(Object.keys(actions), states)
+                        ? createNaiveReducer(currentPath, Object.keys(actions), states)
                         : (stateInst: any = states) => stateInst
         const reducer = combineSubReducers(currentReducer, subReducers)
 
@@ -210,23 +224,24 @@ export class StateEngineBase {
     }
 
     dispatch(actionPath: string, ...params: any[]): Promise<any>|any {
-        if (!this.store || !this.store.diapatch) {
+        if (!this.store || !this.store.dispatch) {
             throw `controllers must be loaded before dispatching actions`
         }
         if (typeof actionPath !== 'string') {
-            return this.store.diapatch({type: 'error', data: 'action path should be a string'})
+            return this.store.dispatch({type: 'error', data: 'action path should be a string'})
         }
         if (!this.actionCache.has(actionPath)) {
-            return this.store.diapatch({type: 'error', data: 'action does not exist'})
+            return this.store.dispatch({type: 'error', data: 'action does not exist'})
         }
             
         const dispatchByStatus = (status: ActionStatus, payload?: any) => {
+            const action = this.getActionByPath(getActionNameByStatus(actionPath, status))
             switch (status) {
             case ActionStatus.doing: case ActionStatus.idle:
-                this.store.diapatch(this.actionCache.get(getActionNameByStatus(actionPath, status))())
+                this.store.dispatch(action())
                 break
             case ActionStatus.done: case ActionStatus.error:
-                this.store.diapatch(this.actionCache.get(getActionNameByStatus(actionPath, status))(payload))
+                this.store.dispatch(action(payload))
                 break
             default:
                 break
@@ -238,22 +253,22 @@ export class StateEngineBase {
         dispatchByStatus(ActionStatus.doing)
 
         // Execute the true action, according to its tpye: async, generator, promise, or pure function
-        const action = this.actionCache.get(actionPath)
+        const {action, that} = this.getActionByPath(actionPath)
         const actionType = checkActionType(action)
         let promiseObj = null, res = null, err = null, isDone = false, isError = false
         switch (actionType) {
         case ActionType.async:
-            promiseObj = action(...params)
+            promiseObj = action.apply(that, params)
             break
         case ActionType.generator:
-            promiseObj = co(action(...params))
+            promiseObj = co(action.apply(that, params))
             break
         case ActionType.promise:
             promiseObj = action
             break
         case ActionType.sync:
             try {
-                res = action(...params)
+                res = action.apply(that, params)
                 if (checkActionType(res) === ActionType.promise) {
                     promiseObj = res
                 } else {
@@ -275,6 +290,7 @@ export class StateEngineBase {
                 throw err
             } else {
                 dispatchByStatus(ActionStatus.done, res)
+                return res
             }
         } else if (promiseObj) {
             return promiseObj.then((res: any) => {
@@ -288,7 +304,7 @@ export class StateEngineBase {
             });
         } else {
             const errMsg = `unsupported action handler type: ${actionType}, path: ${actionPath}`
-            this.store.diapatch({ type: 'error', data: errMsg })
+            this.store.dispatch({ type: 'error', data: errMsg })
             throw errMsg
         }
     }

@@ -55,31 +55,76 @@ const identifyStateByAbsolutePath = ({state = {}, path, returnValue = false, cus
     return result
 }
 
-export const mergeStateToProps = (currentPath: string, combines?: any) => {
+export class ActionScope {
+    path: string
+    actionCache: KeyValue
+    actionCount: number
+    bindCache: KeyValue
+    constructor(currentPath: string, originalActions: KeyValue) {
+        this.path = currentPath
+        const actionNameArray = Object.keys(originalActions)
+        this.actionCount = actionNameArray.length
+        this.actionCache = {}
+        this.bindCache = {}
+        if (this.actionCount > 0) {
+            for (let actionName of actionNameArray) {
+                this.actionCache[actionName] = originalActions[actionName]
+                this.bindCache[actionName] = this.actionCache
+            }
+        }
+    }
+
+    bind(obj: any) {
+        if (!this.actionCount) return
+        if (!obj) return
+        if (typeof obj !== 'object') return
+        if (Object.keys(obj).length === 0) return
+        const actionNameArray = Object.keys(this.actionCache)
+        const that = Object.assign({}, this.actionCache, obj)
+        for (let actionName of actionNameArray) {
+            this.bindCache[actionName] = that
+        }
+    }
+
+    getAction(actionName: string) {
+        const action = this.actionCache[actionName]
+        const that = this.bindCache[actionName]
+        return {action, that}
+    }
+
+    hasAction(actionName: string) {
+        if (this.actionCache[actionName]) return true
+        return false
+    }
+}
+
+export const mergeStateToProps = (currentPath: string,  combines: any, actionScope: ActionScope) => {
     // mapStateToProps?: (state, ownProps?) => Object
     return (state: any = {}) => {
         let props = identifyStateByAbsolutePath({state, path: currentPath, returnValue: true})
-        if (!combines) return props || {}
-
-        let combinedPaths = (typeof combines === 'string') ? [combines] : combines
-        if (Array.isArray(combinedPaths)) {
-            for (let path of combinedPaths) {
-                const combinedState = identifyStateByAbsolutePath({state, path})
-                props = Object.assign(props || {}, combinedState)
-            }
-        } else if (Object.prototype.toString.call(combinedPaths) === '[object Object]') {
-            for (let customName in combinedPaths) {
-                const combinedState = identifyStateByAbsolutePath({state, path: combinedPaths[customName], customName})
-                props = Object.assign(props || {}, combinedState)
+        if (combines) {
+            let combinedPaths = (typeof combines === 'string') ? [combines] : combines
+            if (Array.isArray(combinedPaths)) {
+                for (let path of combinedPaths) {
+                    const combinedState = identifyStateByAbsolutePath({state, path})
+                    props = Object.assign(props || {}, combinedState)
+                }
+            } else if (Object.prototype.toString.call(combinedPaths) === '[object Object]') {
+                for (let customName in combinedPaths) {
+                    const combinedState = identifyStateByAbsolutePath({state, path: combinedPaths[customName], customName})
+                    props = Object.assign(props || {}, combinedState)
+                }
             }
         }
-        return props || {};
+        props = props || {};
+        actionScope.bind(props)
+        return props
     }
 }
-export const mergeDispatchToProps = (customDispatcher: any, currentPath: string, originalActions: KeyValue) => {
+export const mergeDispatchToProps = (customDispatcher: any, currentPath: string, actionScope: ActionScope) => {
     // mapDispatchToProps?: Object | (dispatch, ownProps?) => Object
-    if (!originalActions) return () => ({})
-    const actionNameSet = Object.keys(originalActions)
+    if (!actionScope) return () => ({})
+    const actionNameSet = Object.keys(actionScope.actionCache)
     if (actionNameSet.length === 0) return () => ({})
     return (dispatch: any) => {
         const dispatchers: KeyValue = {};
@@ -99,7 +144,7 @@ export const mergeDispatchToProps = (customDispatcher: any, currentPath: string,
 // modified from combineReducers method of official redux package
 export function combineSubReducers(currentReducer: any, subReducers: KeyValue) {
     const subReducerKeys = Object.keys(subReducers)
-    return function combination(state:KeyValue = {}, payload: {type: string, data: any}) {
+    return function combination(state:KeyValue = {}, payload: ActionPayload) {
         let hasChanged = false
         const nextState = currentReducer(state, payload) || {}
         hasChanged = hasChanged || nextState !== state
@@ -115,10 +160,10 @@ export function combineSubReducers(currentReducer: any, subReducers: KeyValue) {
     }
 }
 
-export interface ActionPayload { type: string, data: string}
-export const createNaiveReducer = (actionKeys: string[], initState: any) => {
+interface ActionPayload { type: string, data: string}
+export const createNaiveReducer = (currentPath: string, actionKeys: string[], initState: any) => {
     const actionKeyCache = new Map<string, boolean>(
-        actionKeys.map(actKey => [actKey, true])
+        actionKeys.map(actionName => [getPropPath(currentPath, actionName), true])
     )
     return (state = initState, payload: ActionPayload) => {
         if (actionKeyCache.has(payload.type)) {
@@ -176,3 +221,4 @@ export const checkPropertyType = (prop: string, value: any): PropertyType => {
         return PropertyType.property
     }
 }
+
