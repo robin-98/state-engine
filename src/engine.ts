@@ -53,7 +53,7 @@ export interface ViewAssembler {
 export class StateEngineBase {
 
     protected actionCache: Map<string, {name: string, actionScope: ActionScope, expandedActions: KeyValue}>
-    protected pathCache: Map<string, string>
+    protected namedPathCache: Map<string, string>
     public reducer: any
     public initState: KeyValue
     public store: any
@@ -61,7 +61,7 @@ export class StateEngineBase {
 
     constructor() {
         this.actionCache = new Map<string, {name: string, actionScope: ActionScope, expandedActions: KeyValue}>()
-        this.pathCache = new Map<string, string>()
+        this.namedPathCache = new Map<string, string>()
         this.reducer = null
         this.initState = {}
         this.store = null
@@ -137,7 +137,7 @@ export class StateEngineBase {
     protected connectView ({ currentPath, connecter, withRouter, combines, actionScope, view }: ConnectView) {
         // using the interface of default connect function of redux
         const connectedView = connecter(
-            mergeStateToProps(currentPath, combines, actionScope),
+            mergeStateToProps(currentPath, combines, actionScope, this.namedPathCache),
             mergeDispatchToProps(this.dispatch.bind(this), currentPath, actionScope)
             /* mergeProps,  options */
         )(view)
@@ -164,7 +164,7 @@ export class StateEngineBase {
         const { $name, $id, $view, $combine, $children, ...others } = controller
         if (!$name) return null
         const currentPath = getPropPath(parentPath, $name)
-        if ($id) this.pathCache.set($id, currentPath)
+        if ($id) this.namedPathCache.set(`#${$id}`, currentPath)
 
         // load current states
         let states:KeyValue = {}, actions:KeyValue = {}
@@ -195,6 +195,7 @@ export class StateEngineBase {
 
         // Connect view using original actions
         const actionScope = new ActionScope(currentPath, actions)
+
         let currentView = this.connectView({
             currentPath, connecter, withRouter,
             combines: $combine, 
@@ -257,7 +258,7 @@ export class StateEngineBase {
         const actionType = checkActionType(action)
         let promiseObj = null, res = null, err = null, isDone = false, isError = false
         switch (actionType) {
-        case ActionType.async:
+        case ActionType.asyncFunction: case ActionType.asyncArrowFunction:
             promiseObj = action.apply(that, params)
             break
         case ActionType.generator:
@@ -266,7 +267,7 @@ export class StateEngineBase {
         case ActionType.promise:
             promiseObj = action
             break
-        case ActionType.sync:
+        case ActionType.syncFunction: case ActionType.syncArrowFunction:
             try {
                 res = action.apply(that, params)
                 if (checkActionType(res) === ActionType.promise) {

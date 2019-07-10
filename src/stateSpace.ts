@@ -98,7 +98,12 @@ export class ActionScope {
     }
 }
 
-export const mergeStateToProps = (currentPath: string,  combines: any, actionScope: ActionScope) => {
+export const isIdentity = (path: string): boolean => {
+    if (path && path.length > 1) return path[0] === '#'
+    return false
+}
+
+export const mergeStateToProps = (currentPath: string,  combines: any, actionScope: ActionScope, namedPathCache: Map<string, string>) => {
     // mapStateToProps?: (state, ownProps?) => Object
     return (state: any = {}) => {
         let props = identifyStateByAbsolutePath({state, path: currentPath, returnValue: true})
@@ -106,12 +111,15 @@ export const mergeStateToProps = (currentPath: string,  combines: any, actionSco
             let combinedPaths = (typeof combines === 'string') ? [combines] : combines
             if (Array.isArray(combinedPaths)) {
                 for (let path of combinedPaths) {
-                    const combinedState = identifyStateByAbsolutePath({state, path})
+                    const absPath = isIdentity(path) ? namedPathCache.get(path) : path
+                    const combinedState = identifyStateByAbsolutePath({state, path: absPath})
                     props = Object.assign(props || {}, combinedState)
                 }
             } else if (Object.prototype.toString.call(combinedPaths) === '[object Object]') {
                 for (let customName in combinedPaths) {
-                    const combinedState = identifyStateByAbsolutePath({state, path: combinedPaths[customName], customName})
+                    const path = combinedPaths[customName]
+                    const absPath = isIdentity(path) ? namedPathCache.get(path) : path
+                    const combinedState = identifyStateByAbsolutePath({state, path: absPath, customName})
                     props = Object.assign(props || {}, combinedState)
                 }
             }
@@ -186,8 +194,10 @@ export enum PropertyType {
 
 
 export enum ActionType {
-    sync = 'sync',
-    async = 'async',
+    syncFunction = 'syncFunction',
+    syncArrowFunction = 'syncArrowFunction',
+    asyncFunction = 'asyncFunction',
+    asyncArrowFunction = 'asyncArrowFunction',
     generator = 'generator',
     promise = 'promise',
     unknown = 'unknown'
@@ -200,10 +210,14 @@ const isPrivateKey = (key: any): boolean => {
 export const checkActionType = (action: any): ActionType => {
     if (!action) return ActionType.unknown
     if (Object.prototype.toString.call(action) === '[object Promise]') return ActionType.promise
-    else if (Object.prototype.toString.call(action) === '[object AsyncFunction]') return ActionType.async
-    else if (Object.prototype.toString.call(action) === '[object GeneratorFunction]') return ActionType.generator
-    else if (Object.prototype.toString.call(action) === '[object Function]') return ActionType.sync
-    else return ActionType.unknown
+    else if (Object.prototype.toString.call(action) === '[object AsyncFunction]') {
+        if (action.toString().indexOf('=>') > 0) return ActionType.asyncArrowFunction
+        return ActionType.asyncFunction
+    } else if (Object.prototype.toString.call(action) === '[object GeneratorFunction]') return ActionType.generator
+    else if (Object.prototype.toString.call(action) === '[object Function]') {
+        if (action.toString().indexOf('=>') > 0) return ActionType.syncArrowFunction
+        return ActionType.syncFunction
+    } else return ActionType.unknown
 }
 
 export const checkPropertyType = (prop: string, value: any): PropertyType => {

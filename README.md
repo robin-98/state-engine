@@ -1,6 +1,8 @@
 # State Engine for MVC
 Super simplified from redux by converting `actions/reducers/containers/store` to `load` and `store`, so that providing super simple MVC developing model for front-end Apps
 
+`For now, please stick on 1.x which is more stable than 2.0.0-alpha, and docs of 2.x is coming soon`
+
 ## What you will get
 A super simple MVC model, all properties of all views are mapped to the space of corresponding controllers, without those redundent and anoying actions or reducers
 
