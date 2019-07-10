@@ -26,19 +26,29 @@ export const getPropPath = (parentPath: string, propName: string) => {
     return parentPath ? parentPath + '.' + propName : propName
 }
 
-const identifyStateByAbsolutePath = (state: KeyValue = {}, path: string, customName: string = '') => {
+interface identifyStateByAbsolutePathParam {
+    state: KeyValue
+    path?: string
+    returnValue?: boolean
+    customName?: string
+}
+const identifyStateByAbsolutePath = ({state = {}, path, returnValue = false, customName = ''}: identifyStateByAbsolutePathParam) => {
     if (!path && !customName) return state
     
     const result: KeyValue = {}
     if (!path && customName) {
+        if (returnValue) return state
         result[customName] = state
     } else { // if (path)
-        let segments = path.split('.')
+        let segments = path!.split('.')
         let parent = state
         for (let i = 0; i < segments.length - 1; i++) {
             parent = parent[segments[i]] || {}
         }
         const originalName = segments[segments.length - 1]
+
+        if (returnValue) return parent[originalName]
+
         if (!customName) result[originalName] = parent[originalName]
         else result[customName] = parent[originalName]
     }
@@ -48,18 +58,18 @@ const identifyStateByAbsolutePath = (state: KeyValue = {}, path: string, customN
 export const mergeStateToProps = (currentPath: string, combines?: any) => {
     // mapStateToProps?: (state, ownProps?) => Object
     return (state: any = {}) => {
-        let props = identifyStateByAbsolutePath(state, currentPath) 
+        let props = identifyStateByAbsolutePath({state, path: currentPath, returnValue: true})
         if (!combines) return props || {}
 
         let combinedPaths = (typeof combines === 'string') ? [combines] : combines
         if (Array.isArray(combinedPaths)) {
             for (let path of combinedPaths) {
-                const combinedState = identifyStateByAbsolutePath(state, path)
+                const combinedState = identifyStateByAbsolutePath({state, path})
                 props = Object.assign(props || {}, combinedState)
             }
         } else if (Object.prototype.toString.call(combinedPaths) === '[object Object]') {
             for (let customName in combinedPaths) {
-                const combinedState = identifyStateByAbsolutePath(state, combinedPaths[customName], customName)
+                const combinedState = identifyStateByAbsolutePath({state, path: combinedPaths[customName], customName})
                 props = Object.assign(props || {}, combinedState)
             }
         }

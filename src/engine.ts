@@ -27,12 +27,14 @@ interface LoadParameter {
     converter?: any
     connecter?: any
     withRouter?: any
+    viewAssembler?: ViewAssembler
 }
 
 interface LoadResult {
     name: string
     reducer: any
     states: any
+    view: any
 }
 
 interface ConnectView { 
@@ -44,20 +46,26 @@ interface ConnectView {
     view: any 
 }
 
+export interface ViewAssembler {
+    (view: any, subviews: KeyValue): any
+}
+
 export class StateEngineBase {
 
     protected actionCache: Map<string, any>
     protected pathCache: Map<string, string>
     public reducer: any
-    public initState: any
+    public initState: KeyValue
     public store: any
+    public view: any
 
     constructor() {
         this.actionCache = new Map<string, any>()
         this.pathCache = new Map<string, string>()
         this.reducer = null
-        this.initState = null
+        this.initState = {}
         this.store = null
+        this.view = null
     }
 
     // internal action will update entire current state space with its response object
@@ -120,7 +128,7 @@ export class StateEngineBase {
             mergeDispatchToProps(this.dispatch.bind(this), currentPath, originalActions)
             /* mergeProps,  options */
         )(view)
-        withRouter(connectedView)
+        return withRouter(connectedView)
     }
 
     // Load the controllers, which should be already assembled as a single controller object
@@ -135,8 +143,9 @@ export class StateEngineBase {
     //     $children: [ <sub-controller1>, <sub-controller2> ... ]
     // }
     load (controller: Controller, params: LoadParameter, parentPath: string = ''): LoadResult|null {
-        const { converter, connecter, withRouter } = Object.assign( {
-            converter: (prop: any) => prop, connecter: () => (view: any) => view, withRouter: (args: any) => args,
+        const { converter, connecter, withRouter , viewAssembler} = Object.assign( {
+            converter: (prop: any) => prop, connecter: () => (currentView: any) => currentView,
+            withRouter: (args: any) => args, viewAssembler: (currentView: any) => currentView
         }, params)
 
         const { $name, $id, $view, $combine, $children, ...others } = controller
@@ -144,7 +153,7 @@ export class StateEngineBase {
         const currentPath = getPropPath(parentPath, $name)
         if ($id) this.pathCache.set($id, currentPath)
 
-        // load states
+        // load current states
         let states:KeyValue = {}, actions:KeyValue = {}
         for (const prop in others) {
             const value = converter(others[prop])
@@ -155,22 +164,10 @@ export class StateEngineBase {
                 states[prop] = value
             }
         }
-
-        // Connect view using original actions
-        this.connectView({
-            currentPath, connecter, withRouter,
-            combines: $combine, 
-            originalActions: actions,
-            view: $view
-        })
-
-        // expand actions
-        this.expandActions(currentPath, actions)
-        this.cacheActions(currentPath, actions)
         
         // load children states and reducers
         // combine current reducer with its children reducers
-        const subReducers: KeyValue = {}
+        const subReducers: KeyValue = {}, subviews: KeyValue = {}
         if ($children && Array.isArray($children) && $children.length > 0) {
             const subStates: KeyValue = {}
             for (let child of $children) {
@@ -178,9 +175,23 @@ export class StateEngineBase {
                 if (!res || !res.name) continue
                 subReducers[res.name] = res.reducer
                 subStates[res.name] = res.states
+                subviews[res.name] = res.view
             }
             states = Object.assign(states, subStates)
         }
+
+        // Connect view using original actions
+        let currentView = this.connectView({
+            currentPath, connecter, withRouter,
+            combines: $combine, 
+            originalActions: actions,
+            view: (Object.keys(subviews).length > 0)? viewAssembler($view, subviews) : $view
+        })
+
+        // expand actions
+        this.expandActions(currentPath, actions)
+        this.cacheActions(currentPath, actions)
+
         const currentReducer = (Object.keys(actions).length > 0)
                         ? createNaiveReducer(Object.keys(actions), states)
                         : (stateInst: any = states) => stateInst
@@ -191,10 +202,11 @@ export class StateEngineBase {
             const rootReducerObj: KeyValue = {}
             rootReducerObj[$name] = reducer
             this.reducer = combineReducers(rootReducerObj)
-            this.initState = states
+            this.initState[$name] = states
+            this.view = currentView
         }
         // return result of current node
-        return { name: $name, reducer, states }
+        return { name: $name, reducer, states, view: currentView }
     }
 
     dispatch(actionPath: string, ...params: any[]): Promise<any>|any {
