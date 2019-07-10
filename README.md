@@ -135,12 +135,16 @@ as the example above has shown:
     $name: ...,
     $view: ...,
     someStateForCounting: 0,
+    log: (someMsg) => {
+        console.log(someMsg)
+    },
     onCountingButtonPress: function() {
+        this.log(`counting value is going to change to: ${this.someStateForCounting+1}`)
         return { someStateForCounting: this.someStateForCounting + 1 }
     }
 }
 ```
-the action `onCountingButtonPress` can access the property `someStateForCounting` of the controller, and the value is guaranteed to be up-to-date.
+the action `onCountingButtonPress` can access the property `someStateForCounting` of the controller, and the value is guaranteed to be up-to-date, and can see all other actions by using the scope pointer `this`
 
 And by returning an object containing the same property with new value, the corresponding property is updated.
 
@@ -153,7 +157,7 @@ And by returning an object containing the same property with new value, the corr
 Every action will be expanded to at least 4 more actions
 which to indicate the action is in which status
 
-1. when begin to execute an action, an affiliated action 'doing' should be triggerred at first this will update current state space with a property '<action name>.status' and its value is 'doing'
+1. when begin to execute an action, an affiliated action 'doing' should be triggerred at first this will update current state space with a property `<action name>.status` and its value is 'doing'
 1. then the true action handler would be executed and waited until it respond or crash with error
 1. if the action executed successfully, another affilated action 'done' should be triggered together with its response object
     1. the response object will be used to update current state space,
@@ -166,6 +170,7 @@ which to indicate the action is in which status
 5. after all proper handlings, including `done` and `error`, the final action 'idle' is strongly suggested to be triggerred
     1. for the goodness of future uses of this action
     1. and the status of the action `<action name>.status` should be 'idle' when the action has lost the focus
+    1. to set action in idle status, just invoke `this.props.<action name>.idle()` in the view, or `this.<action name>.idle()` in the controller
 
 ## Interfaces
 1. `load(controller,  params = { converter: prop => () => prop, connecter: () => page => page, withRouter: page => page, viewAssembler: (currentView:any, subviews: {[key: string]: any}) => currentView }, parentPath: string = '')`
