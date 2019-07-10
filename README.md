@@ -101,6 +101,7 @@ engine.dispatch('path.to.some.action', arg1, arg2, arg3);
 ```shell
 {
     $name: <controller name, is optional, filename will be used when omitted>,
+    $id: <global unique identity, allowing accessing this ctrl without providing full path>,
     $view: <React view object> ,
     $combine:   <global path to some property> 
                     | [ <path1>, <path2>...]
