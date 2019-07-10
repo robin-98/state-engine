@@ -12,7 +12,8 @@
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",
   "scripts": {
-    "build": "tsc --build",
+    "build": "rm -rf ./lib && tsc --build",
+    "test": "tsc --build ./tsconfig-test.json && node ./test.js",
     "prepublish": "npm run build && rm -f ./package-lock.json"
   },
   "keywords": [

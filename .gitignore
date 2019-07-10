@@ -39,6 +39,9 @@ jspm_packages
 # Workspace
 .idea
 package-lock.json
+src/test*
 tmp/
 lib
 tsconfig-localbuild.json
+tsconfig-test.json
+test*
