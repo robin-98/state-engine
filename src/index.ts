@@ -30,6 +30,7 @@ export class StateEngine extends StateEngineBase {
                 this.reducer || emptyReducer,
                 Object.assign(this.initState, window.__REDUX_DEVTOOLS_EXTENSION__ && window.__REDUX_DEVTOOLS_EXTENSION__()),
                 applyMiddleware(
+                    this.middlewareForBindingActionScope.bind(this),
                     thunkMiddleware,
                     ...middlewares,
                 )
@@ -41,6 +42,7 @@ export class StateEngine extends StateEngineBase {
                 this.reducer || emptyReducer,
                 this.initState,
                 applyMiddleware(
+                    this.middlewareForBindingActionScope.bind(this),
                     thunkMiddleware,
                     ...middlewares,
                 )

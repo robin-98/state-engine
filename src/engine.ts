@@ -7,10 +7,11 @@
  */
 import { 
     KeyValue, getPropPath, mergeStateToProps, mergeDispatchToProps, combineSubReducers,
-    getActionNameByStatus, ActionStatus, createNaiveReducer,
-    checkPropertyType, PropertyType, checkActionType, ActionType, ActionScope
+    getActionNameByStatus, ActionStatus, createNaiveReducer, getActionStatusByName,
+    checkPropertyType, PropertyType, checkActionType, ActionType, ActionScope, ActionPayload
 } from './stateSpace'
 import co from 'co'
+import { combineReducers } from 'redux'
 
 // Interfaces
 interface Controller {
@@ -54,22 +55,24 @@ export class StateEngineBase {
 
     protected actionCache: Map<string, {name: string, actionScope: ActionScope, expandedActions: KeyValue}>
     protected namedPathCache: Map<string, string>
-    public reducer: any
+    protected viewCache: Map<string, any>
     public initState: KeyValue
+    protected reducer: any
     public store: any
     public rootView: any
     public views: KeyValue
-    public viewCache: Map<string, any>
+    protected actionScopeCache: Map<string, {status: ActionStatus, actionScope: ActionScope}>
 
     constructor() {
         this.actionCache = new Map<string, {name: string, actionScope: ActionScope, expandedActions: KeyValue}>()
+        this.actionScopeCache = new Map<string, {status: ActionStatus, actionScope: ActionScope}>()
         this.namedPathCache = new Map<string, string>()
+        this.viewCache = new Map<string,any>()
         this.views = {}
         this.reducer = null
         this.initState = {}
         this.store = null
         this.rootView = null
-        this.viewCache = new Map<string,any>()
     }
 
     // internal action will update entire current state space with its response object
@@ -83,6 +86,40 @@ export class StateEngineBase {
         for (let actionName in expandedActions) {
             const actionPath = getPropPath(currentPath, actionName)
             this.actionCache.set(actionPath, {name: actionName, actionScope, expandedActions})
+            let status = getActionStatusByName(actionName)
+            if (status) {
+                this.actionScopeCache.set(actionPath, {status, actionScope})
+            }
+        }
+    }
+
+    protected middlewareForBindingActionScope(store: any) {
+        return (next: any) => (action: ActionPayload) => {
+            if (!action || !action.type || !this.actionScopeCache.has(action.type)) {
+                return next(action)
+            }
+            // const {status, actionScope} = this.actionScopeCache.get(action.type)!
+            const {actionScope} = this.actionScopeCache.get(action.type)!
+            // if (status !== ActionStatus.idle) {
+                const bindState = () => {
+                    const state = store.getState()
+                    let node = state
+                    for (let seg of actionScope.segmentsCache) {
+                        node = node[seg] || {}
+                    }
+                    actionScope.bind(node)
+                }
+                // if (status === ActionStatus.doing) {
+                    bindState()
+                // }
+                next(action)
+                // if (status !== ActionStatus.doing) {
+                    bindState()
+                // }
+            // } else {
+                // next(action)
+            // }
+            
         }
     }
 
@@ -90,9 +127,9 @@ export class StateEngineBase {
         const cache = this.actionCache.get(path)
         if (!cache) return null
         else if (cache.actionScope.hasAction(cache.name)) {
-            return cache.actionScope.getAction(cache.name)
+            return {action: cache.actionScope.getAction(cache.name), that: cache.actionScope.bindCache}
         } else {
-            return cache.expandedActions[cache.name]
+            return {action: cache.expandedActions[cache.name], that: cache.actionScope.bindCache}
         }
     }
 
@@ -121,18 +158,20 @@ export class StateEngineBase {
                 const statusActionPath = getPropPath(currentPath, statusActionName)
                 actions[statusActionName] = (payload?: any) => {
                     let data: KeyValue = {}
-                    data[`${actionName}.status`] = ActionStatus[status as keyof typeof ActionStatus]
+                    data[`${actionName}$status`] = ActionStatus[status as keyof typeof ActionStatus]
                     if (status === ActionStatus.error) {
-                        data[`${actionName}.error`] = payload 
+                        data[`${actionName}$error`] = payload 
                     // } else if (status === ActionStatus.done && this.isInternalAction(actionName) && payload && typeof payload === 'object') {
                     //     data = Object.assign({}, data, payload)
                     } else if (status === ActionStatus.done) {
-                        data[`${actionName}.response`] = payload
+                        data[`${actionName}$response`] = payload
                         if (payload && typeof payload === 'object') {
                             data = Object.assign({}, data, payload)
                         }
                     }
-                    return { type: statusActionPath, data }
+                    
+                    const action = { type: statusActionPath, data }
+                    return action
                 }
             }
         }
@@ -164,7 +203,7 @@ export class StateEngineBase {
     //     [action name: string]: <function body as the action handler>
     //     $children: [ <sub-controller1>, <sub-controller2> ... ]
     // }
-    load (controller: Controller, params: LoadParameter, parentPath: string = ''): LoadResult|null {
+    load (controller: Controller, params: LoadParameter, parentPath: string = '', isRoot: boolean = true): LoadResult|null {
         const { converter, connecter, withRouter , viewAssembler} = Object.assign( {
             converter: (prop: any) => prop, connecter: () => (currentView: any) => currentView,
             withRouter: (args: any) => args, viewAssembler: (currentView: any , subviews: KeyValue) => (subviews)?currentView:currentView
@@ -196,13 +235,13 @@ export class StateEngineBase {
         let neighborReducers: any[] = []
         if ($children && Array.isArray($children) && $children.length > 0) {
             const subStates: KeyValue = {}
-            let neighborStates: KeyValue = {}
             for (let child of $children) {
-                let res = this.load(child, params, currentPath)
+                let res = this.load(child, params, currentPath, false)
                 if (!res) continue
                 if (!res.name) {
                     neighborReducers.push(res.reducer)
-                    neighborStates = Object.assign(neighborStates, res.states)
+                    // states = Object.assign({}, states, res.states)
+                    states = Object.assign(states, res.states)
                     subviews = Object.assign(subviews, res.views)
                 } else {
                     subReducers[res.name] = res.reducer
@@ -210,22 +249,21 @@ export class StateEngineBase {
                     subviews[res.name] = res.rootView
                 }
             }
-            states = Object.assign(states, neighborStates)
+            // states = Object.assign({}, states, subStates)
             states = Object.assign(states, subStates)
         }
 
-        let currentView = $view
+        
         // Connect view using original actions
-        // const view = (subviews.length > 0)?viewAssembler($view, subviews):$view
+        let currentView = viewAssembler($view, subviews)
         const actionScope = new ActionScope(currentPath, actions)
-        if ($name && $view) {
-            const view = viewAssembler($view, subviews)
-            this.viewCache.set(currentPath, view)
+        if ($name && currentView) {
+            this.viewCache.set(currentPath, currentView)
             currentView = this.connectView({
                 currentPath, connecter, withRouter,
                 combines: $combine, 
                 actionScope,
-                view 
+                view: currentView 
             })
         }
         // expand actions
@@ -234,12 +272,19 @@ export class StateEngineBase {
 
         const currentReducer = (Object.keys(actions).length > 0)
                         ? createNaiveReducer(currentPath, Object.keys(actions), states)
-                        : (stateInst: any = states) => stateInst ||{}
+                        : (stateInst: any = states) => stateInst
         const reducer = combineSubReducers([currentReducer, ...neighborReducers], subReducers)
 
         // save root reducer
-        if (parentPath === '') {
-            this.reducer = reducer
+        if (isRoot) {
+            if (!$name) this.reducer = reducer
+            else {
+                const reducerObj: KeyValue = {}
+                reducerObj[$name] = reducer
+                this.reducer = combineReducers(reducerObj)
+            }
+            // if (!$name) this.initState = Object.assign({}, states)
+            // else this.initState[$name] = Object.assign({}, states)
             if (!$name) this.initState = states
             else this.initState[$name] = states
             if (currentView) this.rootView = currentView
@@ -261,7 +306,7 @@ export class StateEngineBase {
         }
             
         const dispatchByStatus = (status: ActionStatus, payload?: any) => {
-            const action = this.getActionByPath(getActionNameByStatus(actionPath, status))
+            const { action } = this.getActionByPath(getActionNameByStatus(actionPath, status)) || { action: ()=>({type: 'error', data: {message: `unknown action '${actionPath}' with status '${status}'`}})}
             switch (status) {
             case ActionStatus.doing: case ActionStatus.idle:
                 this.store.dispatch(action())
@@ -279,7 +324,7 @@ export class StateEngineBase {
         dispatchByStatus(ActionStatus.doing)
 
         // Execute the true action, according to its tpye: async, generator, promise, or pure function
-        const {action, that} = this.getActionByPath(actionPath)
+        const {action, that} = this.getActionByPath(actionPath) || {action: null, that: null}
         const actionType = checkActionType(action)
         let promiseObj = null, res = null, err = null, isDone = false, isError = false
         switch (actionType) {
@@ -306,7 +351,7 @@ export class StateEngineBase {
             }
             break
         default:
-            break
+            throw `unsupported action: ${action}, at path'${actionPath}'`
         }
 
         if (isDone || isError) {

@@ -22,6 +22,18 @@ export const getActionNameByStatus = (actionName: string, status: string):string
     return `${actionName}.$${statusValue}`
 }
 
+export const getActionStatusByName = (actionName: string):ActionStatus|null => {
+    let result = null
+    if (actionName.indexOf('.$')>0) {
+        const parts = actionName.split('.$')
+        if (parts.length === 2) {
+            const statusValue = parts[1]
+            result = ActionStatus[statusValue as keyof typeof ActionStatus]
+        }
+    }
+    return result
+}
+
 export const getPropPath = (parentPath: string, propName: string) => {
     return parentPath ? parentPath + '.' + propName : propName
 }
@@ -60,8 +72,10 @@ export class ActionScope {
     actionCache: KeyValue
     actionCount: number
     bindCache: KeyValue
+    segmentsCache: string[]
     constructor(currentPath: string, originalActions: KeyValue) {
         this.path = currentPath
+        this.segmentsCache = currentPath.split('.')
         const actionNameArray = Object.keys(originalActions)
         this.actionCount = actionNameArray.length
         this.actionCache = {}
@@ -79,17 +93,12 @@ export class ActionScope {
         if (!obj) return
         if (typeof obj !== 'object') return
         if (Object.keys(obj).length === 0) return
-        const actionNameArray = Object.keys(this.actionCache)
-        const that = Object.assign({}, this.actionCache, obj)
-        for (let actionName of actionNameArray) {
-            this.bindCache[actionName] = that
-        }
+        this.bindCache = Object.assign({}, this.actionCache, obj)
     }
 
     getAction(actionName: string) {
         const action = this.actionCache[actionName]
-        const that = this.bindCache[actionName]
-        return {action, that}
+        return action
     }
 
     hasAction(actionName: string) {
@@ -125,7 +134,9 @@ export const mergeStateToProps = (currentPath: string,  combines: any, actionSco
             }
         }
         props = props || {};
-        actionScope.bind(props)
+        console.log('mapped state for view path:', currentPath,', props:', props)
+        if (actionScope) actionScope = actionScope
+        // actionScope.bind(props)
         return props
     }
 }
@@ -142,7 +153,10 @@ export const mergeDispatchToProps = (customDispatcher: any, currentPath: string,
                 return customDispatcher(actionPath , ...params);
             }
             dispatchers[actionName].idle = () => {
-                return dispatch({type: getActionNameByStatus(actionPath, ActionStatus.idle), data:{}})
+                const idlePath = getActionNameByStatus(actionPath, ActionStatus.idle)
+                const data:KeyValue = {}
+                data[`${actionName}$status`] = 'idle'
+                return dispatch({type: idlePath, data})
             }
         }
         return dispatchers;
@@ -159,19 +173,23 @@ export function combineSubReducers(currentReducers: any[], subReducers: KeyValue
             nextState = currentReducers[i](previousState, payload) || {}
             hasChanged = hasChanged || nextState !== previousState
         }
+        let hasSubChanged = false, nextSubState: KeyValue = {}
         for (let i = 0; i < subReducerKeys.length; i++) {
             const key = subReducerKeys[i]
             const reducer = subReducers[key]
-            const previousStateForKey = state[key]
+            const previousStateForKey = nextState[key]
             const nextStateForKey = reducer(previousStateForKey, payload) || {}
-            nextState[key] = nextStateForKey
-            hasChanged = hasChanged || nextStateForKey !== previousStateForKey
+            hasSubChanged = hasSubChanged || nextStateForKey !== previousStateForKey
+            if (hasSubChanged) nextSubState[key] = nextStateForKey
         }
-        return hasChanged ? nextState : state
+        if (!hasChanged && hasSubChanged) return Object.assign({}, state, nextSubState)
+        if (hasChanged && !hasSubChanged) return nextState
+        if (hasChanged && hasSubChanged) return Object.assign(nextState, nextSubState)
+        return state
     }
 }
 
-interface ActionPayload { type: string, data: string}
+export interface ActionPayload { type: string, data: string}
 export const createNaiveReducer = (currentPath: string, actionKeys: string[], initState: any) => {
     const actionKeyCache = new Map<string, boolean>(
         actionKeys.map(actionName => [getPropPath(currentPath, actionName), true])
