@@ -5,7 +5,6 @@
  * @modify date 2019-07-08 17:23:15
  * @desc [description]
  */
-import { combineReducers } from 'redux'
 import { 
     KeyValue, getPropPath, mergeStateToProps, mergeDispatchToProps, combineSubReducers,
     getActionNameByStatus, ActionStatus, createNaiveReducer,
@@ -15,9 +14,9 @@ import co from 'co'
 
 // Interfaces
 interface Controller {
-    $name: string  // May be omitted, using its file name instead
+    $name?: string  // May be omitted, using its file name instead
     $id?: string    // a global unique id, which can be located directlly
-    $view: any     // View object, in React or something else
+    $view?: any     // View object, in React or something else
     $combine?: string | string[] | {[key: string]: string}
     $children?: Controller[]
     [key: string]: any  // Properties of the state, if type of the value is function, then it is an action
@@ -31,10 +30,11 @@ interface LoadParameter {
 }
 
 interface LoadResult {
-    name: string
+    name: string|undefined|null
     reducer: any
     states: any
-    view: any
+    rootView: any
+    views?: KeyValue
 }
 
 interface ConnectView { 
@@ -57,15 +57,19 @@ export class StateEngineBase {
     public reducer: any
     public initState: KeyValue
     public store: any
-    public view: any
+    public rootView: any
+    public views: KeyValue
+    public viewCache: Map<string, any>
 
     constructor() {
         this.actionCache = new Map<string, {name: string, actionScope: ActionScope, expandedActions: KeyValue}>()
         this.namedPathCache = new Map<string, string>()
+        this.views = {}
         this.reducer = null
         this.initState = {}
         this.store = null
-        this.view = null
+        this.rootView = null
+        this.viewCache = new Map<string,any>()
     }
 
     // internal action will update entire current state space with its response object
@@ -141,7 +145,12 @@ export class StateEngineBase {
             mergeDispatchToProps(this.dispatch.bind(this), currentPath, actionScope)
             /* mergeProps,  options */
         )(view)
+
         return withRouter(connectedView)
+    }
+
+    getView(path: string) {
+        return this.viewCache.get(path)
     }
 
     // Load the controllers, which should be already assembled as a single controller object
@@ -162,9 +171,12 @@ export class StateEngineBase {
         }, params)
 
         const { $name, $id, $view, $combine, $children, ...others } = controller
-        if (!$name) return null
-        const currentPath = getPropPath(parentPath, $name)
-        if ($id) this.namedPathCache.set(`#${$id}`, currentPath)
+
+        let currentPath = parentPath
+        if ($name) {
+            currentPath = getPropPath(parentPath, $name)
+            if ($id) this.namedPathCache.set(`#${$id}`, currentPath)
+        }
 
         // load current states
         let states:KeyValue = {}, actions:KeyValue = {}
@@ -180,48 +192,61 @@ export class StateEngineBase {
         
         // load children states and reducers
         // combine current reducer with its children reducers
-        const subReducers: KeyValue = {}, subviews: KeyValue = {}
+        let subReducers: KeyValue = {}, subviews: KeyValue = {}
+        let neighborReducers: any[] = []
         if ($children && Array.isArray($children) && $children.length > 0) {
             const subStates: KeyValue = {}
+            let neighborStates: KeyValue = {}
             for (let child of $children) {
                 let res = this.load(child, params, currentPath)
-                if (!res || !res.name) continue
-                subReducers[res.name] = res.reducer
-                subStates[res.name] = res.states
-                subviews[res.name] = res.view
+                if (!res) continue
+                if (!res.name) {
+                    neighborReducers.push(res.reducer)
+                    neighborStates = Object.assign(neighborStates, res.states)
+                    subviews = Object.assign(subviews, res.views)
+                } else {
+                    subReducers[res.name] = res.reducer
+                    subStates[res.name] = res.states
+                    subviews[res.name] = res.rootView
+                }
             }
+            states = Object.assign(states, neighborStates)
             states = Object.assign(states, subStates)
         }
 
+        let currentView = $view
         // Connect view using original actions
+        // const view = (subviews.length > 0)?viewAssembler($view, subviews):$view
         const actionScope = new ActionScope(currentPath, actions)
-
-        let currentView = this.connectView({
-            currentPath, connecter, withRouter,
-            combines: $combine, 
-            actionScope,
-            view: (Object.keys(subviews).length > 0)? viewAssembler($view, subviews) : $view
-        })
-
+        if ($name && $view) {
+            const view = viewAssembler($view, subviews)
+            this.viewCache.set(currentPath, view)
+            currentView = this.connectView({
+                currentPath, connecter, withRouter,
+                combines: $combine, 
+                actionScope,
+                view 
+            })
+        }
         // expand actions
         this.expandActions(currentPath, actions)
         this.cacheActions(currentPath, actionScope, actions)
 
         const currentReducer = (Object.keys(actions).length > 0)
                         ? createNaiveReducer(currentPath, Object.keys(actions), states)
-                        : (stateInst: any = states) => stateInst
-        const reducer = combineSubReducers(currentReducer, subReducers)
+                        : (stateInst: any = states) => stateInst ||{}
+        const reducer = combineSubReducers([currentReducer, ...neighborReducers], subReducers)
 
         // save root reducer
         if (parentPath === '') {
-            const rootReducerObj: KeyValue = {}
-            rootReducerObj[$name] = reducer
-            this.reducer = combineReducers(rootReducerObj)
-            this.initState[$name] = states
-            this.view = currentView
+            this.reducer = reducer
+            if (!$name) this.initState = states
+            else this.initState[$name] = states
+            if (currentView) this.rootView = currentView
+            if (!$name) this.views = subviews
         }
         // return result of current node
-        return { name: $name, reducer, states, view: currentView }
+        return { name: $name, reducer, states, rootView: currentView, views: subviews }
     }
 
     dispatch(actionPath: string, ...params: any[]): Promise<any>|any {

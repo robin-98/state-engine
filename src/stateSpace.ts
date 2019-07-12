@@ -150,12 +150,15 @@ export const mergeDispatchToProps = (customDispatcher: any, currentPath: string,
 }
 
 // modified from combineReducers method of official redux package
-export function combineSubReducers(currentReducer: any, subReducers: KeyValue) {
+export function combineSubReducers(currentReducers: any[], subReducers: KeyValue) {
     const subReducerKeys = Object.keys(subReducers)
     return function combination(state:KeyValue = {}, payload: ActionPayload) {
         let hasChanged = false
-        const nextState = currentReducer(state, payload) || {}
-        hasChanged = hasChanged || nextState !== state
+        let previousState = state, nextState = state
+        for (let i = 0; i<currentReducers.length; i++) {
+            nextState = currentReducers[i](previousState, payload) || {}
+            hasChanged = hasChanged || nextState !== previousState
+        }
         for (let i = 0; i < subReducerKeys.length; i++) {
             const key = subReducerKeys[i]
             const reducer = subReducers[key]
