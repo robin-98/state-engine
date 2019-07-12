@@ -158,7 +158,7 @@ export class StateEngineBase {
     load (controller: Controller, params: LoadParameter, parentPath: string = ''): LoadResult|null {
         const { converter, connecter, withRouter , viewAssembler} = Object.assign( {
             converter: (prop: any) => prop, connecter: () => (currentView: any) => currentView,
-            withRouter: (args: any) => args, viewAssembler: (currentView: any) => currentView
+            withRouter: (args: any) => args, viewAssembler: (currentView: any , subviews: KeyValue) => (subviews)?currentView:currentView
         }, params)
 
         const { $name, $id, $view, $combine, $children, ...others } = controller
