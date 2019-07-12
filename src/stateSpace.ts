@@ -134,7 +134,6 @@ export const mergeStateToProps = (currentPath: string,  combines: any, actionSco
             }
         }
         props = props || {};
-        console.log('mapped state for view path:', currentPath,', props:', props)
         if (actionScope) actionScope = actionScope
         // actionScope.bind(props)
         return props
