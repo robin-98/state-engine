@@ -37,7 +37,7 @@ export default {
 ```
 ###### Step 2: load controllers
 ```javascript
-import * as engine from 'state-engine';
+import { StateEngine } from 'state-engine';
 import { connect } from 'react-redux';
 import { withRouter } from 'react-router-dom';
 
@@ -45,13 +45,10 @@ import controller from './controllers/rootCtrl';
 
 const parameters = {
     connecter: connect,
-    withRouter: withRouter,
-    viewAssembler: (View: any, subviews: {[key: string]: any}) => {
-        const subviewArray = Object.keys(subviews).map((viewName) => subviews[viewName])
-        return ( <View> { subviewArray.map((SubView, i) => (<SubView key={i}></SubView>)) } </View> )
-    }
+    withRouter: withRouter
 };
 
+const engine = new StateEngine()
 engine.load(controller, parameters);
 ```
 ###### Step 3: generate the redux store
@@ -61,7 +58,7 @@ const loggerMiddleware = createLogger();
 const store = engine.store(loggerMiddleware);
 ```
 ###### Final Step: assemble the application
-```javascript
+```jsx
 import React, { Component }  from 'react';
 import ReactDOM from 'react-dom';
 import { Provider } from 'react-redux'
@@ -73,7 +70,8 @@ const browserHistory = createBrowserHistory();
 if (document.getElementById('root')) {
     ReactDOM.render(
         <Provider store = {store} >
-            <engine.view />
+            <engine.rootView />
+            <!-- <engine.views /> if multiple controllers presented as children of the root controller, and the root controller omitted its own $name and $view properties -->
         </Provider>
         , document.getElementById('root')
     );
@@ -88,21 +86,21 @@ engine.dispatch('path.to.some.action', arg1, arg2, arg3);
 |-controllers
 |  |-ctrl1
 |  |-ctrl2
-|  |-index.js
+|  |-index.ts
 |-views
 |  |-component
 |  |-pages
-|-engine.js
-|-router.js
-|-app.js
+|-engine.ts
+|-router.ts
+|-app.ts
 ```
 
 ## Controller data structure:
 ```shell
 {
-    $name: <controller name, is optional, filename will be used when omitted>,
-    $id: <global unique identity, allowing accessing this ctrl without providing full path>,
-    $view: <React view object> ,
+    $name: <controller name, optional, when omitted the controller will be used as container, its children will be regarded as brothers of its parent controller>,
+    $id: <global unique identity, optional, allowing accessing this ctrl without providing full path>,
+    $view: <view object> ,
     $combine:   <global path to some property> 
                     | [ <path1>, <path2>...]
                     | { prop1: path1, prop2: path2 ... }
@@ -114,7 +112,7 @@ engine.dispatch('path.to.some.action', arg1, arg2, arg3);
 
 ## Concepts
 
-1. `$name` can not be omitted, and must be unique throughout its layer
+1. `$name` should be unique throughout its layer, when omitted, the $view property is also useless, the controller will be used as container of its children controllers, which will be regarded as brothers of its parent controller
 1. The structure of store equals with the organization of controllers
 1. View (collection of views) is loaded to the coresponding node using keyword `$view`
 1. The State of current node:
@@ -141,6 +139,7 @@ as the example above has shown:
     },
     onCountingButtonPress: function() {
         this.log(`counting value is going to change to: ${this.someStateForCounting+1}`)
+        // this.someStateForCounting++ : this is invalid, won't change anything
         return { someStateForCounting: this.someStateForCounting + 1 }
     }
 }
@@ -158,20 +157,20 @@ And by returning an object containing the same property with new value, the corr
 Every action will be expanded to at least 4 more actions
 which to indicate the action is in which status
 
-1. when begin to execute an action, an affiliated action 'doing' should be triggerred at first this will update current state space with a property `<action name>.status` and its value is 'doing'
+1. when begin to execute an action, an affiliated action 'doing' should be triggerred at first this will update current state space with a property `<action name>$status` and its value is 'doing'
 1. then the true action handler would be executed and waited until it respond or crash with error
 1. if the action executed successfully, another affilated action 'done' should be triggered together with its response object
     1. the response object will be used to update current state space,
     1. if the action is an internal action (whose name begin with character: _ ), the entire current state space will be updated by its response object
-    1. otherwise an affiliated property `<action name>.response` of current space will be updated with its response object
-    1. meanwhile the property `<action name>.status` of current state space will be updated with value 'done'
+    1. otherwise an affiliated property `<action name>$response` of current space will be updated with its response object
+    1. meanwhile the property `<action name>$status` of current state space will be updated with value 'done'
 4. if the action crashed with an error, an affilated action 'error' would be triggerred with the error object
     1. and the property `<action name>.status` of current state space will be updated with value 'error'
-    1. and another affilated property `<action name>.error` of current state space will be updated with the error object
+    1. and another affilated property `<action name>$error` of current state space will be updated with the error object
 5. after all proper handlings, including `done` and `error`, the final action 'idle' is strongly suggested to be triggerred
     1. for the goodness of future uses of this action
-    1. and the status of the action `<action name>.status` should be 'idle' when the action has lost the focus
-    1. to set action in idle status, just invoke `this.props.<action name>.idle()` in the view, or `this.<action name>.idle()` in the controller
+    1. and the status of the action `<action name>$status` should be 'idle' when the action has lost the focus
+    1. to set action in idle status, just invoke `this.props.<action name>.idle()` in the view
 
 ## Interfaces
 1. `load(controller,  params = { converter: prop => () => prop, connecter: () => page => page, withRouter: page => page, viewAssembler: (currentView:any, subviews: {[key: string]: any}) => currentView }, parentPath: string = '')`
