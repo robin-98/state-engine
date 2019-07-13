@@ -6,7 +6,7 @@ A super simple MVC model, all properties of all views are mapped to the space of
 
 ## Quick Start (React.js)
 ###### Step 1: Connect controllers with pages 
-```javascript
+```typescript
 // ./controllers/rootCtrl.ts
 import fetch from 'isomorphic-fetch';
 import RootView from '../views/RootView';
@@ -36,7 +36,7 @@ export default {
 }
 ```
 ###### Step 2: load controllers
-```javascript
+```typescript
 import { StateEngine } from 'state-engine';
 import { connect } from 'react-redux';
 import { withRouter } from 'react-router-dom';
@@ -52,13 +52,13 @@ const engine = new StateEngine()
 engine.load(controller, parameters);
 ```
 ###### Step 3: generate the redux store
-```javascript
+```typescript
 import { createLogger } from 'redux-logger';
 const loggerMiddleware = createLogger();
 const store = engine.store(loggerMiddleware);
 ```
 ###### Final Step: assemble the application
-```jsx
+```typescript
 import React, { Component }  from 'react';
 import ReactDOM from 'react-dom';
 import { Provider } from 'react-redux'
@@ -71,14 +71,14 @@ if (document.getElementById('root')) {
     ReactDOM.render(
         <Provider store = {store} >
             <engine.rootView />
-            <!-- <engine.views /> if multiple controllers presented as children of the root controller, and the root controller omitted its own $name and $view properties -->
+            //  <engine.views /> if multiple controllers presented as children of the root controller, and the root controller omitted its own $name and $view properties
         </Provider>
         , document.getElementById('root')
     );
 }
 ```
 ###### Manually dispatching actions (not suggested)
-```javascript
+```typescript
 engine.dispatch('path.to.some.action', arg1, arg2, arg3);
 ```
 ## Suggested Project Structure
@@ -129,7 +129,7 @@ engine.dispatch('path.to.some.action', arg1, arg2, arg3);
 Every action defined by keyword `function` or `async function` is guaranteed to have dynamic runtime action scope connected with the controller `state` and other actions
 
 as the example above has shown:
-```javascript
+```typescript
 {
     $name: ...,
     $view: ...,
