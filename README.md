@@ -139,7 +139,7 @@ as the example above has shown:
     },
     onCountingButtonPress: function() {
         this.log(`counting value is going to change to: ${this.someStateForCounting+1}`)
-        // this.someStateForCounting++ : this is invalid, won't change anything
+        // this.someStateForCounting++ : 'this' is immutable, won't change anything
         return { someStateForCounting: this.someStateForCounting + 1 }
     }
 }
