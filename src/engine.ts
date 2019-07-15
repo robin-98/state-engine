@@ -98,36 +98,26 @@ export class StateEngineBase {
             if (!action || !action.type || !this.actionScopeCache.has(action.type)) {
                 return next(action)
             }
-            // const {status, actionScope} = this.actionScopeCache.get(action.type)!
             const {actionScope} = this.actionScopeCache.get(action.type)!
-            // if (status !== ActionStatus.idle) {
-                const bindState = () => {
-                    const state = store.getState()
-                    let node = state
-                    for (let seg of actionScope.segmentsCache) {
-                        node = node[seg] || {}
-                    }
-                    actionScope.bind(node)
+            const bindState = () => {
+                const state = store.getState()
+                let node = state
+                for (let seg of actionScope.segmentsCache) {
+                    node = node[seg] || {}
                 }
-                // if (status === ActionStatus.doing) {
-                    bindState()
-                // }
-                next(action)
-                // if (status !== ActionStatus.doing) {
-                    bindState()
-                // }
-            // } else {
-                // next(action)
-            // }
-            
+                actionScope.bind(node)
+            }
+            bindState()
+            next(action)
+            bindState()
         }
     }
 
-    protected getActionByPath(path: string) {
+    protected getActionByPath(path: string, original: boolean = false) {
         const cache = this.actionCache.get(path)
         if (!cache) return null
         else if (cache.actionScope.hasAction(cache.name)) {
-            return {action: cache.actionScope.getAction(cache.name), that: cache.actionScope.bindCache}
+            return {action: cache.actionScope.getAction(cache.name, original), that: cache.actionScope.bindCache}
         } else {
             return {action: cache.expandedActions[cache.name], that: cache.actionScope.bindCache}
         }
@@ -324,7 +314,7 @@ export class StateEngineBase {
         dispatchByStatus(ActionStatus.doing)
 
         // Execute the true action, according to its tpye: async, generator, promise, or pure function
-        const {action, that} = this.getActionByPath(actionPath) || {action: null, that: null}
+        const {action, that} = this.getActionByPath(actionPath, true) || {action: null, that: null}
         const actionType = checkActionType(action)
         let promiseObj = null, res = null, err = null, isDone = false, isError = false
         switch (actionType) {

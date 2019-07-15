@@ -70,6 +70,7 @@ const identifyStateByAbsolutePath = ({state = {}, path, returnValue = false, cus
 export class ActionScope {
     path: string
     actionCache: KeyValue
+    originalHandlers: KeyValue
     actionCount: number
     bindCache: KeyValue
     segmentsCache: string[]
@@ -80,9 +81,11 @@ export class ActionScope {
         this.actionCount = actionNameArray.length
         this.actionCache = {}
         this.bindCache = {}
+        this.originalHandlers = {}
         if (this.actionCount > 0) {
             for (let actionName of actionNameArray) {
                 this.actionCache[actionName] = originalActions[actionName]
+                this.originalHandlers[actionName] = originalActions[actionName]
                 this.bindCache[actionName] = this.actionCache
             }
         }
@@ -96,8 +99,8 @@ export class ActionScope {
         this.bindCache = Object.assign({}, this.actionCache, obj)
     }
 
-    getAction(actionName: string) {
-        const action = this.actionCache[actionName]
+    getAction(actionName: string, original: boolean = false) {
+        const action = original? this.originalHandlers[actionName] : this.actionCache[actionName]
         return action
     }
 
@@ -135,7 +138,6 @@ export const mergeStateToProps = (currentPath: string,  combines: any, actionSco
         }
         props = props || {};
         if (actionScope) actionScope = actionScope
-        // actionScope.bind(props)
         return props
     }
 }
@@ -157,6 +159,7 @@ export const mergeDispatchToProps = (customDispatcher: any, currentPath: string,
                 data[`${actionName}$status`] = 'idle'
                 return dispatch({type: idlePath, data})
             }
+            actionScope.actionCache[actionName] = dispatchers[actionName]
         }
         return dispatchers;
     }
