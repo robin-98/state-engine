@@ -320,6 +320,7 @@ export class StateEngineBase {
         Object.keys(ActionType).forEach((k:string) => {
             if (ActionType[k as keyof typeof ActionType] === actionType) {
                 console.log('action type:', k)
+                if (action) console.log('action:', action.toString())
             }
         })
         switch (actionType) {
