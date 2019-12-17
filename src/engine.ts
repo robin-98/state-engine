@@ -317,6 +317,11 @@ export class StateEngineBase {
         const {action, that} = this.getActionByPath(actionPath, true) || {action: null, that: null}
         const actionType = checkActionType(action)
         let promiseObj = null, res = null, err = null, isDone = false, isError = false
+        Object.keys(ActionType).forEach((k:string) => {
+            if (ActionType[k as keyof typeof ActionType] === actionType) {
+                console.log('action type:', k)
+            }
+        })
         switch (actionType) {
         case ActionType.asyncFunction: case ActionType.asyncArrowFunction:
             promiseObj = action.apply(that, params)
@@ -354,6 +359,7 @@ export class StateEngineBase {
                 return res
             }
         } else if (promiseObj) {
+            console.log('is promise obj:', promiseObj)
             return promiseObj.then((res: any) => {
                 // to indicate the action is done, with the response = res
                 dispatchByStatus(ActionStatus.done, res)
