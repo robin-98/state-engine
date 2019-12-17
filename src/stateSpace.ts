@@ -238,7 +238,9 @@ export const checkActionType = (action: any): ActionType => {
         return ActionType.asyncFunction
     } else if (Object.prototype.toString.call(action) === '[object GeneratorFunction]') return ActionType.generator
     else if (Object.prototype.toString.call(action) === '[object Function]') {
-        if (action.toString().indexOf('=>') > 0) return ActionType.syncArrowFunction
+        const actionText = action.toString()
+        if (actionText.indexOf('async(function') > 0) return ActionType.asyncFunction
+        else if (actionText.indexOf('=>') > 0) return ActionType.syncArrowFunction
         return ActionType.syncFunction
     } else return ActionType.unknown
 }
