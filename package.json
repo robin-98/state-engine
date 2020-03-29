@@ -1,6 +1,6 @@
 {
   "name": "state-engine",
-  "version": "2.1.19",
+  "version": "2.1.20",
   "description": "spa state engine based on redux",
   "repository": {
     "type": "git",
